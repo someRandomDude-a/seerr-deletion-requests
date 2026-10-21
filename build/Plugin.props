@@ -1,0 +1,18 @@
+<Project>
+  <!-- Single source of release identity/version. Jellyfin requires numeric System.Version values. -->
+  <PropertyGroup>
+    <PluginVersion>0.1.0.0</PluginVersion>
+    <PluginGuid>3de88ba1-6d5c-49f5-854b-65a72f473f21</PluginGuid>
+    <PluginDisplayName>Deletion queue</PluginDisplayName>
+    <PluginOwner>someRandomDude-a</PluginOwner>
+    <PluginCategory>General</PluginCategory>
+    <PluginOverview>Consent-protected Seerr deletion proposals for Jellyfin.</PluginOverview>
+    <PluginDescription>Safety preview: anonymous consent-protected proposals and native administrator monitoring. Destructive execution is unavailable pending verified Seerr target pinning and independent rollback protection.</PluginDescription>
+    <PluginReleaseChannel>preview</PluginReleaseChannel>
+    <PluginTargetAbi>12.2.0.0</PluginTargetAbi>
+    <PluginSdkVersion>12.2.0</PluginSdkVersion>
+    <Version>$(PluginVersion)</Version>
+    <AssemblyVersion>$(PluginVersion)</AssemblyVersion>
+    <FileVersion>$(PluginVersion)</FileVersion>
+  </PropertyGroup>
+</Project>

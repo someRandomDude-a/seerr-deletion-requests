@@ -1,0 +1,22 @@
+name: deletion-queue-tests
+services:
+  jellyfin:
+    image: ${JELLYFIN_TEST_IMAGE:-jellyfin/jellyfin:12.2@sha256:357724bf0ae27a672c7cbaa899db2d9abeb13dbd8657ccce750258a4c059d037}
+    network_mode: none
+    environment:
+      JELLYFIN_PublishedServerUrl: http://127.0.0.1:8096
+    volumes:
+      - config:/config
+      - cache:/cache
+      - ../artifacts/plugin/linux-x64:/config/plugins/DeletionQueue_0.1.0.0
+  smoke:
+    image: python:3.13-alpine@sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a
+    network_mode: service:jellyfin
+    depends_on:
+      - jellyfin
+    volumes:
+      - ./smoke.py:/tests/smoke.py:ro
+    command: ["python", "/tests/smoke.py"]
+volumes:
+  config:
+  cache:

@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr" data-theme="dark"><head><meta charset="utf-8" /><meta name="viewport" content="width=device-width,initial-scale=1" /><title>Deletion queue · Jellyfin</title></head>
+<body class="mainAnimatedPages skinBody"><main id="deletionQueueUser" class="page libraryPage type-interior">
+  <header class="dq-toolbar"><h1>Deletion queue</h1><nav class="dq-toolbar">
+    <a id="jellyfinHome" class="button-link emby-button">Jellyfin</a>
+    <button is="emby-button" class="emby-button raised" id="refresh" type="button">Refresh</button>
+    <button is="emby-button" class="emby-button raised" id="helpToggle" type="button" aria-expanded="false">Help</button>
+    <button is="paper-icon-button-light" class="paper-icon-button-light" id="notificationBell" type="button" aria-label="Notifications" aria-haspopup="dialog" aria-controls="notificationDialog"><span class="material-icons" aria-hidden="true">notifications</span><span id="noticeCount" class="countIndicator indicator" aria-live="polite" hidden>0</span></button>
+  </nav></header>
+  <p>Safety preview: proposals and consent are retained. No deletion is sent until remote target pinning and independent rollback protection are implemented.</p>
+  <section id="help" hidden><h2>How it works</h2><p>The default activity window is 14 days. Every recent viewer must answer Yes for their latest activity snapshot. Silence or No blocks deletion until that activity leaves the verified window. New activity requires fresh consent and a new full delay of at least 48 hours after eligibility.</p><p>Only the original proposal owner may Undo before execution is claimed. An uncertain operation is never automatically resent. Reading this page, the notification bell or Help does not record activity, approve deletion or mark notices read.</p><p>Notification preferences, subscriptions and Mark read each require a separate explicit action.</p></section>
+  <p id="status" role="status"></p><p id="error" role="alert"></p>
+  <section><h2>Propose deletion</h2><form id="proposeForm">
+    <div class="selectContainer"><label class="selectLabel" for="selectionType">Target type</label><select is="emby-select" class="emby-select emby-select-withcolor" id="selectionType"><option value="item">Jellyfin item ID</option><option value="request">Your Seerr request ID</option></select><div class="selectArrowContainer"><span class="selectArrow material-icons keyboard_arrow_down" aria-hidden="true"></span></div></div>
+    <div class="inputContainer"><label class="inputLabel" for="identifier">Target identifier</label><input is="emby-input" class="emby-input" id="identifier" maxlength="36" required autocomplete="off" /></div>
+    <label class="checkboxContainer emby-checkbox-label"><input is="emby-checkbox" class="emby-checkbox" type="checkbox" id="is4k" /><span class="checkboxLabel">4K target (separate from standard edition)</span><span class="checkboxOutline"><span class="material-icons checkboxIcon checkboxIcon-checked check" aria-hidden="true"></span></span></label>
+    <button is="emby-button" class="emby-button raised button-submit" type="submit">Verify target</button>
+  </form><div id="preview" hidden><p id="previewTitle"></p><button is="emby-button" class="emby-button raised" type="button" id="confirmProposal">Propose / approve existing proposal</button></div></section>
+  <section><h2>Your accessible queue</h2><div id="queue" class="vertical-list"></div><button is="emby-button" class="emby-button raised" type="button" id="loadMore" hidden>Load more</button></section>
+  <section><h2>Your preferences</h2><form id="preferencesForm">
+    <div class="inputContainer"><label class="inputLabel" for="personalHours">Personal deletion delay (hours)</label><input is="emby-input" class="emby-input" id="personalHours" type="number" min="48" max="8760" required value="48" /></div>
+    <label class="checkboxContainer emby-checkbox-label"><input is="emby-checkbox" class="emby-checkbox" id="notifications" type="checkbox" /><span class="checkboxLabel">Enable private in-app notices for explicitly subscribed proposals</span><span class="checkboxOutline"><span class="material-icons checkboxIcon checkboxIcon-checked check" aria-hidden="true"></span></span></label>
+    <button is="emby-button" class="emby-button raised button-submit" type="submit">Save preferences</button>
+  </form></section>
+  <dialog id="notificationDialog" class="dialog" aria-labelledby="notificationTitle"><div class="formDialogHeader"><h2 id="notificationTitle" class="formDialogHeaderTitle">Notifications</h2></div><div class="formDialogContent dq-dialog-content"><p id="noticeStatus" role="status"></p><div id="notices" class="vertical-list"></div></div><div class="formDialogFooter formDialogFooter-flex"><button is="emby-button" class="emby-button raised formDialogFooterItem" id="closeNotices" type="button">Close</button></div></dialog>
+</main><script src="assets/theme.js" defer></script><script src="assets/user.js" defer></script></body></html>

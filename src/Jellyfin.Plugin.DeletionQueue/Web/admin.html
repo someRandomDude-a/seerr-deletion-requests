@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html><head><title>Deletion queue</title></head><body>
+<div id="deletionQueueAdmin" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox,emby-select">
+  <link rel="stylesheet" href="../DeletionQueue/assets/queue.css" />
+  <div data-role="content"><div class="content-primary">
+    <h1>Deletion queue</h1>
+    <p id="dqMode" role="status">Loading safety status…</p>
+    <button is="emby-button" type="button" id="dqRefresh" class="raised">Refresh monitoring</button>
+    <p id="dqError" role="alert"></p>
+    <h2>Seerr connection</h2>
+    <form id="dqConnection">
+      <div class="inputContainer"><label for="dqUrl">Seerr base URL</label><input is="emby-input" id="dqUrl" type="url" required placeholder="https://seerr.example.com" /></div>
+      <div class="inputContainer"><label for="dqKey">API key (leave blank to retain)</label><input is="emby-input" id="dqKey" type="password" autocomplete="new-password" /></div>
+      <p>Credentials are encrypted in plugin-owned storage and never returned by monitoring reads. Use HTTPS or a trusted private container network.</p>
+      <button is="emby-button" type="submit" class="raised button-submit">Save connection</button>
+    </form>
+    <h2>Permissions and safety policy</h2>
+    <form id="dqPolicy">
+      <div class="selectContainer"><label for="dqAuthority">Global proposal authority</label><select is="emby-select" id="dqAuthority"><option value="0">Denied</option><option value="1">Own requests</option><option value="2">Any accessible item</option></select></div>
+      <div class="inputContainer"><label for="dqDays">Recent activity window (days)</label><input is="emby-input" id="dqDays" type="number" min="1" max="365" required /></div>
+      <div class="inputContainer"><label for="dqHours">Deletion delay (hours, minimum 48)</label><input is="emby-input" id="dqHours" type="number" min="48" max="8760" required /></div>
+      <label class="checkboxContainer"><input is="emby-checkbox" id="dqAuto" type="checkbox" /><span>Opt in to automatic deletion (currently blocked by unavailable safety contracts)</span></label>
+      <label class="checkboxContainer"><input is="emby-checkbox" id="dqSuspend" type="checkbox" /><span>Suspend eligibility</span></label>
+      <p>When supported, deletion removes the movie/whole series and its files from Radarr/Sonarr through Seerr. Seerr requests remain. This preview never sends deletion, even when opted in.</p>
+      <h3>Per-account overrides</h3><div id="dqAccounts"></div>
+      <button is="emby-button" type="submit" class="raised button-submit">Save policy</button>
+    </form>
+    <h2>Coverage and integrity evidence</h2><pre id="dqCoverage" class="dq-evidence"></pre>
+    <h2>Backlog and retained history</h2><div id="dqBacklog"></div>
+    <h2>Authenticated transition journal</h2><pre id="dqJournal" class="dq-evidence"></pre>
+    <p>Monitoring reads never approve, retry, execute or repair. No reset/force-delete controls are provided.</p>
+    <p><a id="dqUserLink" class="button-link">Open your private queue</a> (same-origin plugin page; no Web files are modified)</p>
+    <dialog id="dqOptInDialog" class="dialog" aria-labelledby="dqOptInTitle"><div class="formDialogHeader"><h2 id="dqOptInTitle" class="formDialogHeaderTitle">Opt in to automatic deletion?</h2></div><div class="formDialogContent dq-dialog-content"><p>This preview cannot execute deletion. A future supported release would remove Arr records and files through Seerr, retaining requests. All consent and safety gates still apply.</p></div><div class="formDialogFooter formDialogFooter-flex"><button is="emby-button" class="raised formDialogFooterItem" type="button" id="dqOptInCancel">Cancel</button><button is="emby-button" class="raised formDialogFooterItem" type="button" id="dqOptInYes">Explicitly opt in</button></div></dialog>
+  </div></div>
+  <script src="configurationpage?name=DeletionQueueAdmin.js"></script>
+</div>
+</body></html>

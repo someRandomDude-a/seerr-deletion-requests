@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DeletionQueue.Core/DeletionQueue.Core.csproj" />
+    <Project Path="src/DeletionQueue.Infrastructure/DeletionQueue.Infrastructure.csproj" />
+    <Project Path="src/Jellyfin.Plugin.DeletionQueue/Jellyfin.Plugin.DeletionQueue.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DeletionQueue.Tests/DeletionQueue.Tests.csproj" />
+  </Folder>
+</Solution>

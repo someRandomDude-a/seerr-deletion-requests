@@ -1,0 +1,8 @@
+**/bin/
+**/obj/
+artifacts/
+TestResults/
+.test-data/
+*.user
+*.suo
+**/node_modules/

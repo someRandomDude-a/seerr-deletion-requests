@@ -1,0 +1,45 @@
+name: Build and safety tests
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_call:
+permissions:
+  contents: read
+jobs:
+  safety:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            runtime: linux-x64
+          - os: ubuntu-24.04-arm
+            runtime: linux-arm64
+          - os: windows-latest
+            runtime: win-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: dotnet build DeletionQueue.slnx -c Release
+      - run: dotnet test DeletionQueue.slnx -c Release --no-build
+      - run: node --check src/Jellyfin.Plugin.DeletionQueue/Web/admin.js
+      - run: node --check src/Jellyfin.Plugin.DeletionQueue/Web/user.js
+      - run: node --check src/Jellyfin.Plugin.DeletionQueue/Web/theme.js
+      - name: Validate packaging and manifest behavior
+        shell: pwsh
+        env:
+          PACKAGE_RUNTIME: ${{ matrix.runtime }}
+        run: |
+          if ($env:PACKAGE_RUNTIME -eq 'linux-x64') {
+            ./scripts/test-release.ps1 -Runtime all
+          } else {
+            ./scripts/test-release.ps1 -Runtime $env:PACKAGE_RUNTIME
+          }

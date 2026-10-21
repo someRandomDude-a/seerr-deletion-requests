@@ -1,0 +1,57 @@
+name: Latest Jellyfin compatibility and isolation
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+  workflow_call:
+  schedule:
+    - cron: '23 5 * * 1'
+permissions:
+  contents: read
+jobs:
+  latest-stable:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Resolve latest stable server/Web and pin this run's image digest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          SERVER_TAG=$(gh api repos/jellyfin/jellyfin/releases/latest --jq .tag_name)
+          WEB_TAG=$(gh api repos/jellyfin/jellyfin-web/releases/latest --jq .tag_name)
+          [[ "$SERVER_TAG" =~ ^v[0-9]+\.[0-9]+(\.[0-9]+)?$ ]] || exit 1
+          [[ "$SERVER_TAG" == "$WEB_TAG" ]] || exit 1
+          docker pull "jellyfin/jellyfin:${SERVER_TAG#v}"
+          IMAGE=$(docker image inspect "jellyfin/jellyfin:${SERVER_TAG#v}" --format '{{index .RepoDigests 0}}')
+          echo "JELLYFIN_TEST_IMAGE=$IMAGE" >> "$GITHUB_ENV"
+          echo "DQ_BROWSER_SESSION=.test-data/browser-session.json" >> "$GITHUB_ENV"
+          echo "Testing $SERVER_TAG with $IMAGE" >> "$GITHUB_STEP_SUMMARY"
+      - run: dotnet publish src/Jellyfin.Plugin.DeletionQueue/Jellyfin.Plugin.DeletionQueue.csproj -c Release -r linux-x64 --self-contained false -o artifacts/plugin/linux-x64
+      - run: docker compose -f test-infrastructure/compose.yaml up -d jellyfin
+      - name: Start loopback-only fixture proxy and run API/adversarial checks
+        run: |
+          node test-infrastructure/browser-proxy.mjs > /tmp/dq-proxy.log 2>&1 &
+          node test-infrastructure/smoke.mjs
+      - run: npm ci --ignore-scripts
+        working-directory: test-infrastructure/browser
+      - run: npx playwright install --with-deps chromium
+        working-directory: test-infrastructure/browser
+      - run: node test-infrastructure/browser/check.mjs
+      - run: node test-infrastructure/browser/native-check.mjs
+      - run: node test-infrastructure/fault-check.mjs
+      - name: Fixture diagnostics
+        if: failure()
+        run: docker compose -f test-infrastructure/compose.yaml logs --tail 100
+      - name: Stop only this disposable project
+        if: always()
+        run: docker compose -f test-infrastructure/compose.yaml down --volumes --remove-orphans

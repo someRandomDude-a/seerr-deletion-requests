@@ -1,0 +1,84 @@
+name: Release plugin
+on:
+  push:
+    tags:
+      - 'v*'
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    uses: ./.github/workflows/test.yml
+  compatibility:
+    uses: ./.github/workflows/jellyfin-compatibility.yml
+  package:
+    needs: [verify, compatibility]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        runtime: [linux-x64, linux-arm64, win-x64]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Validate tag and build immutable package
+        shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+          PACKAGE_RUNTIME: ${{ matrix.runtime }}
+        run: |
+          . ./scripts/release-common.ps1
+          $metadata = Get-PluginReleaseMetadata
+          Assert-ReleaseTag $env:RELEASE_TAG $metadata
+          $null = Get-PluginReleaseNotes $metadata.version
+          ./scripts/package.ps1 -Runtime $env:PACKAGE_RUNTIME -OutputDirectory artifacts/release -ContinuousIntegration
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.runtime }}
+          path: artifacts/release/*
+          if-no-files-found: error
+          retention-days: 30
+  publish:
+    needs: package
+    runs-on: ubuntu-latest
+    # Catalog writes are serialized; never force-push over another release's history.
+    concurrency:
+      group: plugin-catalog-publish
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: artifacts/release
+          merge-multiple: true
+      - name: Validate downloaded artifacts before attesting
+        shell: pwsh
+        run: |
+          . ./scripts/release-common.ps1
+          $metadata = Get-PluginReleaseMetadata
+          $descriptors = @(Get-ChildItem artifacts/release/*.package.json)
+          if ($descriptors.Count -ne 3) { throw 'Incomplete release artifacts.' }
+          foreach ($file in $descriptors) { $null = Test-ReleasePackage $file.FullName $metadata }
+      - uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: artifacts/release/*.zip
+      - name: Publish release and update Jellyfin repositories
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: ./scripts/publish-release.ps1 -PackagesDirectory artifacts/release -Tag $env:RELEASE_TAG

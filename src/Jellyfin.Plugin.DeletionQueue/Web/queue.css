@@ -1,0 +1,11 @@
+/* Layout only. No palette, typography, borders, button appearance or global/native overrides. */
+#deletionQueueUser { max-width: 64rem; margin-inline: auto; padding: 1.5rem; }
+#deletionQueueUser .dq-toolbar, #deletionQueueUser .dq-actions { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+#deletionQueueUser section { margin-block: 1.5rem; }
+#deletionQueueUser article { padding-block: 1rem; }
+#notificationDialog, #dqOptInDialog { inset: 0; margin: auto; max-width: min(38rem, 90vw); max-height: 80vh; overflow: auto; }
+#notificationDialog .dq-dialog-content, #dqOptInDialog .dq-dialog-content { padding-inline: 1.5rem; }
+#notificationBell { position: relative; }
+#noticeCount { position: absolute; inset-block-start: -.4em; inset-inline-end: -.5em; }
+#deletionQueueUser [hidden], #notificationDialog [hidden] { display: none !important; }
+.dq-evidence { white-space: pre-wrap; overflow-wrap: anywhere; }
