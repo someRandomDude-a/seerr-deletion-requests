@@ -2,12 +2,13 @@ param(
     [string]$Dotnet = 'dotnet',
     [ValidateSet('linux-x64', 'linux-arm64', 'win-x64')][string]$Runtime = 'linux-x64',
     [string]$OutputDirectory = '',
-    [switch]$ContinuousIntegration
+    [switch]$ContinuousIntegration,
+    [string]$Tag = ''
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'release-common.ps1')
 $root = Split-Path $PSScriptRoot -Parent
-$metadata = Get-PluginReleaseMetadata $root
+$metadata = Get-PluginReleaseMetadata -Root $root -Tag $Tag
 if (!$OutputDirectory) { $OutputDirectory = Join-Path $root 'artifacts' }
 $OutputDirectory = [IO.Path]::GetFullPath($OutputDirectory)
 New-Item -ItemType Directory -Force $OutputDirectory | Out-Null
@@ -23,7 +24,8 @@ $publish = Join-Path $work 'publish'
 $stage = Join-Path $work 'package'
 New-Item -ItemType Directory -Force $stage | Out-Null
 $project = Join-Path $root 'src/Jellyfin.Plugin.DeletionQueue/Jellyfin.Plugin.DeletionQueue.csproj'
-$arguments = @('publish', $project, '-c', 'Release', '-r', $Runtime, '--self-contained', 'false', '-o', $publish)
+$arguments = @('publish', $project, '-c', 'Release', '-r', $Runtime, '--self-contained', 'false', '-o', $publish,
+    "-p:PluginVersion=$($metadata.version)")
 if ($ContinuousIntegration) { $arguments += '-p:ContinuousIntegrationBuild=true' }
 & $Dotnet @arguments
 if ($LASTEXITCODE -ne 0) { throw 'Plugin publish failed.' }

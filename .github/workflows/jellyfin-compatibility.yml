@@ -13,6 +13,8 @@ jobs:
   latest-stable:
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    env:
+      RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -23,6 +25,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Resolve the plugin version under test
+        shell: pwsh
+        run: |
+          . ./scripts/release-common.ps1
+          $metadata = Get-PluginReleaseMetadata -Tag $env:RELEASE_TAG
+          "PluginVersion=$($metadata.version)" >> $env:GITHUB_ENV
+          "PLUGIN_TEST_VERSION=$($metadata.version)" >> $env:GITHUB_ENV
       - name: Resolve latest stable server/Web and pin this run's image digest
         env:
           GH_TOKEN: ${{ github.token }}

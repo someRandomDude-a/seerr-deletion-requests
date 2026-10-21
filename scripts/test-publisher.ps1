@@ -1,4 +1,4 @@
-param([Parameter(Mandatory)][string]$PackagesDirectory)
+param([Parameter(Mandatory)][string]$PackagesDirectory, [string]$Tag = '')
 $ErrorActionPreference = 'Stop'
 $previousExitCode = Get-Variable LASTEXITCODE -ValueOnly -ErrorAction SilentlyContinue
 . (Join-Path $PSScriptRoot 'release-common.ps1')
@@ -116,7 +116,7 @@ foreach ($name in $names) { $saved[$name] = [Environment]::GetEnvironmentVariabl
 try {
     $env:GITHUB_ACTIONS = 'true'; $env:GITHUB_REPOSITORY = 'someRandomDude-a/seerr-deletion-requests'
     $env:GITHUB_SHA = $script:mock.source; $env:GH_TOKEN = 'offline-fixture-not-a-real-token'
-    $metadata = Get-PluginReleaseMetadata
+    $metadata = Get-PluginReleaseMetadata -Tag $Tag
     $scriptPath = Join-Path $PSScriptRoot 'publish-release.ps1'
     $failed = $false
     $failure = $null

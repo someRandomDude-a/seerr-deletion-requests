@@ -29,7 +29,7 @@ The package script creates `artifacts/DeletionQueue-0.1.0.0-linux-x64.zip` with 
 
 ## Releases and repository installation
 
-Tagged releases are built and verified by GitHub Actions. Version, ABI, channel and immutable plugin identity are managed in `build/Plugin.props`; tags must match, for example `v0.1.0.0`.
+Tagged releases are built and verified by GitHub Actions. The exact triggering tag supplies the release version: `v0.1.0.1` builds version `0.1.0.1` throughout the DLLs, installed manifest and repository catalogs, without editing a version file. `build/Plugin.props` keeps the untagged-build default, ABI, channel and immutable plugin identity. Tags must use four numeric components; see [release setup](docs/releases.md).
 
 After the first published release, register **one** platform/channel JSON URL in Jellyfin's plugin repositories. For the current preview on standard Linux x64 Docker:
 

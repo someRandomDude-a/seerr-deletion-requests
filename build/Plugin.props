@@ -1,7 +1,7 @@
 <Project>
-  <!-- Single source of release identity/version. Jellyfin requires numeric System.Version values. -->
+  <!-- Fixed release identity and untagged-build defaults. Tagged builds supply PluginVersion. -->
   <PropertyGroup>
-    <PluginVersion>0.1.0.0</PluginVersion>
+    <PluginVersion Condition="'$(PluginVersion)' == ''">0.1.0.0</PluginVersion>
     <PluginGuid>3de88ba1-6d5c-49f5-854b-65a72f473f21</PluginGuid>
     <PluginDisplayName>Deletion queue</PluginDisplayName>
     <PluginOwner>someRandomDude-a</PluginOwner>

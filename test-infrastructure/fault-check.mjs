@@ -6,7 +6,9 @@ const s = JSON.parse(await readFile(process.env.DQ_BROWSER_SESSION || '.test-dat
 const fixture = JSON.parse(execFileSync('docker', ['inspect', 'deletion-queue-tests-jellyfin-1'], { encoding: 'utf8' }))[0];
 assert.equal(fixture.Config.Labels['com.docker.compose.project'], 'deletion-queue-tests');
 assert.equal(fixture.HostConfig.NetworkMode, 'none');
-assert.deepEqual(fixture.Mounts.map(m => m.Destination).sort(), ['/cache', '/config', '/config/plugins/DeletionQueue_0.1.0.0']);
+const pluginVersion = process.env.PLUGIN_TEST_VERSION || '0.1.0.0';
+assert.match(pluginVersion, /^\d+\.\d+\.\d+\.\d+$/);
+assert.deepEqual(fixture.Mounts.map(m => m.Destination).sort(), ['/cache', '/config', '/config/plugins/DeletionQueue_' + pluginVersion]);
 async function get(path, expected = 200) {
     const response = await fetch('http://127.0.0.1:18496' + path, { headers: { Authorization: `MediaBrowser Token="${s.token}"` } });
     assert.equal(response.status, expected, path); const text = await response.text(); try { return JSON.parse(text); } catch { return text; }

@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+- Derive DLL, installed manifest, package and repository versions from the triggering Git tag without a source-version bump.
+- Preserve earlier catalog entries and immutable assets while advertising newer compatible versions to existing Jellyfin installations.
+- Verify tag/ref consistency and two-version upgrade history in release tests.
+
+**Automatic deletion remains unavailable** in this safety preview; versioning and updates do not bypass execution safety gates.
+
 ## [0.1.0.0]
 
 Initial **safety-preview** release for Jellyfin 12.2 / .NET 10.

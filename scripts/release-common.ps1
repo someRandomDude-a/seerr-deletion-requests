@@ -55,16 +55,20 @@ function Read-ReleaseJson {
 }
 
 function Get-PluginReleaseMetadata {
-    param([string]$Root = (Split-Path $PSScriptRoot -Parent))
+    param([string]$Root = (Split-Path $PSScriptRoot -Parent), [string]$Tag = '')
+    $eventTag = Get-ReleaseEventTag
+    if (!$Tag) { $Tag = $eventTag }
+    elseif ($eventTag -and $Tag -cne $eventTag) { throw 'Requested tag does not match the triggering Git tag.' }
     [xml]$xml = Get-Content -LiteralPath (Join-Path $Root 'build/Plugin.props') -Raw -Encoding UTF8
     $p = $xml.Project.PropertyGroup
     $metadata = [ordered]@{
-        version = [string]$p.PluginVersion; guid = [string]$p.PluginGuid
+        version = $p.SelectSingleNode('PluginVersion').InnerText; guid = [string]$p.PluginGuid
         name = [string]$p.PluginDisplayName; owner = [string]$p.PluginOwner
         category = [string]$p.PluginCategory; overview = [string]$p.PluginOverview
         description = [string]$p.PluginDescription; channel = [string]$p.PluginReleaseChannel
         targetAbi = [string]$p.PluginTargetAbi; sdkVersion = [string]$p.PluginSdkVersion
     }
+    if ($Tag) { $metadata.version = ConvertFrom-ReleaseTag $Tag }
     foreach ($field in $metadata.Keys) {
         if ([string]::IsNullOrWhiteSpace($metadata[$field])) { throw "Missing release metadata: $field" }
     }
@@ -79,6 +83,29 @@ function Get-PluginReleaseMetadata {
     return $metadata
 }
 
+function Get-ReleaseEventTag {
+    # Use the exact event ref, not git describe: several tags can point at the same commit.
+    if ($env:GITHUB_REF_TYPE -eq 'tag') {
+        if (!$env:GITHUB_REF_NAME) { throw 'Missing triggering tag name.' }
+        if ($env:GITHUB_REF -and $env:GITHUB_REF -cne "refs/tags/$($env:GITHUB_REF_NAME)") {
+            throw 'Triggering Git tag refs disagree.'
+        }
+        return $env:GITHUB_REF_NAME
+    }
+    if ($env:GITHUB_REF -and $env:GITHUB_REF.StartsWith('refs/tags/', [StringComparison]::Ordinal)) {
+        return $env:GITHUB_REF.Substring('refs/tags/'.Length)
+    }
+    return ''
+}
+
+function ConvertFrom-ReleaseTag {
+    param([string]$Tag)
+    if (!$Tag.StartsWith('v', [StringComparison]::Ordinal)) { throw 'Release tags must start with lowercase v.' }
+    $version = $Tag.Substring(1)
+    Assert-NumericVersion $version
+    return $version
+}
+
 function Assert-NumericVersion {
     param([string]$Version)
     if ($Version -notmatch '^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$' -or
@@ -89,16 +116,21 @@ function Assert-NumericVersion {
 
 function Assert-ReleaseTag {
     param([string]$Tag, [System.Collections.IDictionary]$Metadata)
-    if ($Tag -cne "v$($Metadata.version)") { throw "Tag must exactly match v$($Metadata.version); got $Tag" }
+    $version = ConvertFrom-ReleaseTag $Tag
+    if ($version -cne $Metadata.version) { throw "Package version $($Metadata.version) does not match tag $Tag." }
 }
 
 function Get-PluginReleaseNotes {
     param([string]$Version, [string]$Root = (Split-Path $PSScriptRoot -Parent))
+    Assert-NumericVersion $Version
     $text = Get-Content -LiteralPath (Join-Path $Root 'CHANGELOG.md') -Raw -Encoding UTF8
     $pattern = '(?ms)^## \[' + [regex]::Escape($Version) + '\][^\r\n]*\r?\n(.*?)(?=^## \[|\z)'
     $match = [regex]::Match($text, $pattern)
-    if (!$match.Success -or [string]::IsNullOrWhiteSpace($match.Groups[1].Value)) { throw "Missing changelog for $Version" }
-    return $match.Groups[1].Value.Trim()
+    if ($match.Success -and ![string]::IsNullOrWhiteSpace($match.Groups[1].Value)) { return $match.Groups[1].Value.Trim() }
+    $unreleased = [regex]::Match($text, '(?ims)^## \[Unreleased\][^\r\n]*\r?\n(.*?)(?=^## \[|\z)')
+    if ($unreleased.Success -and ![string]::IsNullOrWhiteSpace($unreleased.Groups[1].Value)) { return $unreleased.Groups[1].Value.Trim() }
+    # Tags do not require a matching source-file version bump or a relabeled older changelog entry.
+    return "Release $Version, built from its Git tag. See README.md and CHANGELOG.md in the tagged source for safety limitations and project history."
 }
 
 function Write-ReleaseJson {
@@ -193,8 +225,12 @@ function Test-ReleasePackage {
             if ($meta[$key] -cne $Metadata[$key]) { throw "Installed manifest $key mismatch." }
         }
         foreach ($assembly in @('Jellyfin.Plugin.DeletionQueue', 'DeletionQueue.Core', 'DeletionQueue.Infrastructure')) {
-            if ([Reflection.AssemblyName]::GetAssemblyName((Join-Path $temporary "$assembly.dll")).Version.ToString() -cne $Metadata.version) {
+            $assemblyPath = Join-Path $temporary "$assembly.dll"
+            if ([Reflection.AssemblyName]::GetAssemblyName($assemblyPath).Version.ToString() -cne $Metadata.version) {
                 throw "Assembly version mismatch: $assembly"
+            }
+            if ([Diagnostics.FileVersionInfo]::GetVersionInfo($assemblyPath).FileVersion -cne $Metadata.version) {
+                throw "File version mismatch: $assembly"
             }
         }
         Assert-AssemblyIdentity (Join-Path $temporary 'Jellyfin.Plugin.DeletionQueue.dll') $Metadata

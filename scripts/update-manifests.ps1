@@ -7,7 +7,7 @@ param(
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'release-common.ps1')
-$metadata = Get-PluginReleaseMetadata
+$metadata = Get-PluginReleaseMetadata -Tag $Tag
 Assert-ReleaseTag $Tag $metadata
 if ($Repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Expected a GitHub owner/repository.' }
 if ($Timestamp -notmatch '^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$') { throw 'Expected a UTC release timestamp.' }

@@ -18,6 +18,8 @@ jobs:
           - os: windows-latest
             runtime: win-x64
     runs-on: ${{ matrix.os }}
+    env:
+      RELEASE_TAG: ${{ github.ref_type == 'tag' && github.ref_name || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -28,6 +30,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Resolve build version from the triggering ref
+        shell: pwsh
+        run: |
+          . ./scripts/release-common.ps1
+          $metadata = Get-PluginReleaseMetadata -Tag $env:RELEASE_TAG
+          "PluginVersion=$($metadata.version)" >> $env:GITHUB_ENV
       - run: dotnet build DeletionQueue.slnx -c Release
       - run: dotnet test DeletionQueue.slnx -c Release --no-build
       - run: node --check src/Jellyfin.Plugin.DeletionQueue/Web/admin.js
@@ -39,7 +47,7 @@ jobs:
           PACKAGE_RUNTIME: ${{ matrix.runtime }}
         run: |
           if ($env:PACKAGE_RUNTIME -eq 'linux-x64') {
-            ./scripts/test-release.ps1 -Runtime all
+            ./scripts/test-release.ps1 -Runtime all -Tag $env:RELEASE_TAG
           } else {
-            ./scripts/test-release.ps1 -Runtime $env:PACKAGE_RUNTIME
+            ./scripts/test-release.ps1 -Runtime $env:PACKAGE_RUNTIME -Tag $env:RELEASE_TAG
           }

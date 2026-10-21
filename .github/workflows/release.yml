@@ -33,10 +33,10 @@ jobs:
           PACKAGE_RUNTIME: ${{ matrix.runtime }}
         run: |
           . ./scripts/release-common.ps1
-          $metadata = Get-PluginReleaseMetadata
+          $metadata = Get-PluginReleaseMetadata -Tag $env:RELEASE_TAG
           Assert-ReleaseTag $env:RELEASE_TAG $metadata
           $null = Get-PluginReleaseNotes $metadata.version
-          ./scripts/package.ps1 -Runtime $env:PACKAGE_RUNTIME -OutputDirectory artifacts/release -ContinuousIntegration
+          ./scripts/package.ps1 -Runtime $env:PACKAGE_RUNTIME -Tag $env:RELEASE_TAG -OutputDirectory artifacts/release -ContinuousIntegration
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.runtime }}
@@ -67,9 +67,11 @@ jobs:
           merge-multiple: true
       - name: Validate downloaded artifacts before attesting
         shell: pwsh
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
         run: |
           . ./scripts/release-common.ps1
-          $metadata = Get-PluginReleaseMetadata
+          $metadata = Get-PluginReleaseMetadata -Tag $env:RELEASE_TAG
           $descriptors = @(Get-ChildItem artifacts/release/*.package.json)
           if ($descriptors.Count -ne 3) { throw 'Incomplete release artifacts.' }
           foreach ($file in $descriptors) { $null = Test-ReleasePackage $file.FullName $metadata }

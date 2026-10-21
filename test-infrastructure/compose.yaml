@@ -8,7 +8,7 @@ services:
     volumes:
       - config:/config
       - cache:/cache
-      - ../artifacts/plugin/linux-x64:/config/plugins/DeletionQueue_0.1.0.0
+      - ../artifacts/plugin/linux-x64:/config/plugins/DeletionQueue_${PLUGIN_TEST_VERSION:-0.1.0.0}
   smoke:
     image: python:3.13-alpine@sha256:2d9aefe2fef018a7eb2c13064c89c71929800fd2e5dccdbf52ea5da5bb8d929a
     network_mode: service:jellyfin

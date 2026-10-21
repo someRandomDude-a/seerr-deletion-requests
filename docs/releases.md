@@ -16,18 +16,22 @@ Jellyfin 12.2's `VersionInfo` supports neither architecture selection nor prerel
 
 `targetAbi` is Jellyfin's minimum compatibility filter, not a maximum supported version or a guarantee for every later 12.x/13.x release. Builds currently target Server/Web **12.2** and .NET 10. The plugin GUID and display name remain fixed so existing installations upgrade rather than creating a second plugin. Packaging and publishing never touch plugin settings, keys, database or valid seals.
 
-## Single source of version and identity
+## Tag-driven versions and fixed identity
 
-Edit `build/Plugin.props`:
+The **exact Git tag that triggered the workflow** is the release version source. For example, `v0.1.0.1` produces assembly/file versions `0.1.0.1`, `DeletionQueue-0.1.0.1-<runtime>.zip`, installed `meta.json` version `0.1.0.1`, and repository entries with that same version and tag-specific asset URLs. No version-file bump is needed. Several tags may point at the same source commit: each uses its own triggering ref, not an arbitrary result of `git describe`.
 
-- `PluginVersion`: **four numeric components**, each 0–65534, for example `0.1.0.0`.
+`build/Plugin.props` still controls:
+
+- `PluginVersion`: the **untagged/local build default**, not a restriction on release tags.
 - `PluginReleaseChannel`: `preview` or `stable`.
 - `PluginTargetAbi` and `PluginSdkVersion`: matching minimum ABI and Jellyfin SDK.
 - Presentation fields: description/overview/owner/category.
 
-Do not change `PluginGuid` or `PluginDisplayName`. The build generates assembly GUID/title/description attributes and all plugin-owned assembly versions from this file. Both installed `meta.json` and repository manifests use the same metadata.
+Do not change `PluginGuid` or `PluginDisplayName`. The build generates assembly GUID/title/description attributes from these fixed identity fields. Tagged build/test jobs and packaging pass the resolved tag version into MSBuild, while artifact validation, publication and catalog generation resolve the same tag version. Both installed `meta.json` and repository manifests must match the compiled assemblies.
 
-Tags must exactly match **`v<PluginVersion>`**, for example `v0.1.0.0`. Do not use `-rc`/`-preview` SemVer suffixes: Jellyfin parses a numeric `System.Version`. Instead use a strictly increasing numeric version and the separate channel. A stable promotion must use a **higher numeric version** than its preview; never retag or republish the same version into another channel.
+Tags must have the form **`v<major>.<minor>.<build>.<revision>`**, for example `v0.1.0.1`, with each component 0–65534 and no leading zeroes. Do not use `-rc`/`-preview` SemVer suffixes: Jellyfin parses a numeric `System.Version`. Use a strictly increasing numeric version and the separate channel. A stable promotion must use a **higher numeric version** than its preview; never retag or republish the same version into another channel.
+
+The catalog retains existing version records, checksums, ABI requirements and immutable download URLs, sorted numerically newest first. The unchanged plugin GUID lets Jellyfin match the higher compatible version to existing **Deletion queue** installations. Discovery/automatic installation follow each server's configured repository/update policy and may require a restart; the workflow does not force updates, alter other plugins, or change Jellyfin settings/state.
 
 Releasing or selecting `stable` does **not** enable automatic deletion or waive safety requirements. This project's present safety-preview limits must remain prominent in release notes until those capabilities actually exist and are verified.
 
@@ -46,13 +50,13 @@ These Jellyfin installer URLs require a **public** repository and public release
 
 ## Publish a version
 
-1. Bump `build/Plugin.props` and add a matching `## [<PluginVersion>]` section to `CHANGELOG.md`.
-2. Review compatibility, upgrade preservation, release notes and safety status. Merge the changes and let CI pass.
-3. Create and push the matching tag, **one release at a time**:
+1. Review compatibility, upgrade preservation, release notes, safety status and the channel in `build/Plugin.props`. Merge the changes and let CI pass. No version-file edit is required.
+2. Optionally add `## [<version>]` or `## [Unreleased]` notes to `CHANGELOG.md`. Exact version notes win, then Unreleased notes; otherwise the workflow emits a generic tagged-build note linking readers to the tagged source's safety/history documents. It never relabels an older version's notes.
+3. Create and push the desired new numeric tag, **one release at a time**, on the commit to release:
 
    ```shell
-   git tag -a v0.1.0.0 -m "Deletion queue 0.1.0.0 safety preview"
-   git push origin v0.1.0.0
+    git tag -a v0.1.0.1 -m "Deletion queue 0.1.0.1 safety preview"
+    git push origin v0.1.0.1
    ```
 
 4. The tag workflow runs the reusable Windows x64/Linux x64/Linux ARM64 test matrix, builds all three packages, validates archive contents/assembly versions/native architectures/checksums, and creates GitHub build provenance.
@@ -73,15 +77,19 @@ PowerShell 7 is used on Actions; packaging/semantic checks also work with Window
 ```powershell
 ./scripts/package.ps1 -Runtime linux-x64 -OutputDirectory artifacts/my-release
 ./scripts/test-release.ps1 -Runtime all
+# Reproduce a tagged release locally without creating/pushing/publishing any Git tag:
+./scripts/package.ps1 -Runtime linux-x64 -Tag v0.1.0.1 -OutputDirectory artifacts/my-tagged-release
+./scripts/test-release.ps1 -Runtime all -Tag v0.1.0.1
 ```
 
 Use a **fresh output directory** for every package build. Existing files are never overwritten, and reused staging directories cannot contribute stale binaries, plugin settings or keys. Packaging requires every declared dependency, checks ELF/PE native architecture and ensures plugin-owned assembly versions match the metadata.
 
-`test-release.ps1` exercises all runtime packages, malformed tags/versions, checksum tampering, forbidden ZIP entries, channel isolation, history retention, immutable-version conflicts and idempotent retries. On PowerShell 7 it also checks the generated catalogs against `manifests/repository.schema.json`. Its offline publisher contract tests shadow both `git` and `gh` and exercise upload failures, post-publication catalog failures, retries and immutable-asset conflicts without making any GitHub request. Outside that fixture, `publish-release.ps1` refuses to run outside the authenticated GitHub Actions context.
+`test-release.ps1` exercises all runtime packages, tag-derived versions that differ from the source default, untagged defaults, malformed/conflicting event tags, note fallbacks, checksum tampering, forbidden ZIP entries, channel isolation, history retention, immutable-version conflicts and idempotent retries. The full suite builds a second real version's three packages from identical source and verifies consistent DLL/installed/catalog versions, higher-version discovery and byte-for-byte retention of older catalog records without editing `Plugin.props`. On PowerShell 7 it also checks the generated catalogs against `manifests/repository.schema.json`. Its offline publisher contract tests shadow both `git` and `gh` and exercise upload failures, post-publication catalog failures, retries and immutable-asset conflicts without making any GitHub request. Outside that fixture, `publish-release.ps1` refuses to run outside the authenticated GitHub Actions context.
 
 ## Failed runs and corrections
 
 - **Before publication:** drafts and partial uploads remain unindexed. Re-run failed jobs in the same workflow run to reuse the original artifacts; identical existing assets are verified rather than overwritten. Do not use `--clobber`.
+- **A workflow/source fix is needed:** rerunning an old tag still runs that tag's original commit and workflow. Put the fix in a new commit and tag it with a higher unused version; do not move a published tag.
 - **After release publication, before catalog update:** the previous catalog remains valid. Re-run the failed publish job with its original artifacts. The script compares uploaded bytes, retains existing history and retries a non-forced branch update.
 - **Concurrent ref update:** the GitHub API refuses a non-fast-forward update. Retry using the latest catalog head; never force-push a stale manifest. The publish jobs are serialized, but multiple pending jobs can still be superseded by GitHub concurrency scheduling; avoid batch-pushing release tags and rerun a skipped publication explicitly.
 - **Mismatched existing asset/version:** publication fails. Never replace published ZIPs, checksums, tag commits or numeric version identities. Correct the source and release a higher version. Switching channels also requires a new version.

@@ -7,7 +7,7 @@ $ErrorActionPreference = 'Stop'
 if ($env:GITHUB_ACTIONS -ne 'true' -or !$env:GH_TOKEN -or !$env:GITHUB_REPOSITORY) {
     throw 'Publishing is only supported inside the protected GitHub tag workflow.'
 }
-$metadata = Get-PluginReleaseMetadata
+$metadata = Get-PluginReleaseMetadata -Tag $Tag
 Assert-ReleaseTag $Tag $metadata
 $repository = $env:GITHUB_REPOSITORY
 if ($repository -notmatch '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$') { throw 'Invalid repository.' }

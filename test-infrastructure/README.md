@@ -30,4 +30,4 @@ Screenshots and ephemeral fixture sessions stay under ignored `.test-data/`; do 
 docker compose -f test-infrastructure/compose.yaml down --volumes --remove-orphans
 ```
 
-GitHub's compatibility workflow runs this sequence against the latest matching stable Server/Web release, recording its immutable image digest. The pinned Compose default remains a reproducible Jellyfin 12.2 baseline.
+GitHub's compatibility workflow runs this sequence against the latest matching stable Server/Web release, recording its immutable image digest. It resolves the triggering plugin tag into `PluginVersion` and `PLUGIN_TEST_VERSION`; the mount directory and installed-plugin version check use that version. For a local tagged-build fixture, set both variables to the four-part version before publishing/starting/running the checks. The pinned Compose default remains a reproducible Jellyfin 12.2 baseline.
