@@ -158,7 +158,12 @@ function ConvertFrom-GitHubApiResponse {
         $body = $text.Substring($split + 2)
     }
     $json = $null
-    try { $json = ConvertTo-ReleaseData (ConvertFrom-Json -InputObject $body) } catch {
+    try {
+        if ($PSVersionTable.PSVersion.Major -ge 7) {
+            $document = [System.Text.Json.JsonDocument]::Parse($body)
+            try { $json = ConvertFrom-ReleaseJsonElement $document.RootElement } finally { $document.Dispose() }
+        } else { $json = ConvertTo-ReleaseData (ConvertFrom-Json -InputObject $body) }
+    } catch {
         if ($ExitCode -eq 0 -and $httpStatus -ge 200 -and $httpStatus -lt 300) { throw "Malformed GitHub API JSON: $Path" }
     }
     # Some CLI/error-output paths expose only GitHub's JSON error envelope, not the status line.

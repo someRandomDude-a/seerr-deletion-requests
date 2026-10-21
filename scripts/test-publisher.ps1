@@ -13,6 +13,7 @@ $script:mock = @{
     files = @{}; pendingFiles = @{}; assets = @{}; uploads = 0; publishes = 0; refs = 0
     failUpload = $true; failRef = $false; calls = 0; lightweight = $false; remoteCommit = ('a' * 40)
     readFailure = 0
+    draftTagReads = 0; draftIdReads = 0; creates = 0
 }
 $DeletionQueuePublisherMock = $script:mock
 $DeletionQueuePublisherFixture = $script:fixture
@@ -55,8 +56,22 @@ function gh {
                 $global:LASTEXITCODE = 1
                 return "HTTP/2.0 $($script:mock.readFailure) Error`nContent-Type: application/json`r`n`r`n{`"status`":`"404`",`"message`":`"not a missing release`"}"
             }
-            $body = $script:mock.release
+            # Match GitHub, not a convenient mock: drafts are NOT returned by this endpoint.
+            if ($null -ne $script:mock.release -and $script:mock.release.draft) { $script:mock.draftTagReads++ }
+            elseif ($null -ne $script:mock.release) { $body = $script:mock.release }
             if ($null -ne $body) { $body.assets = @($script:mock.assets.Keys | ForEach-Object { @{ name = $_ } }) }
+        } elseif ($path -match '/releases\?per_page=100&page=1$') {
+            # Put the draft on the second page to exercise complete lookup before creation/retry.
+            $body = @(0..99 | ForEach-Object { @{ id = (1000 + $_); tag_name = "unrelated-$_"; draft = $false } })
+        } elseif ($path -match '/releases\?per_page=100&page=2$') {
+            $body = @()
+            if ($null -ne $script:mock.release) { $body = @($script:mock.release) }
+        } elseif ($path -match '/releases/42$') {
+            $body = $script:mock.release
+            if ($null -ne $body) {
+                $script:mock.draftIdReads++
+                $body.assets = @($script:mock.assets.Keys | ForEach-Object { @{ name = $_ } })
+            }
         } else { throw "Unexpected API read in publisher test: $path" }
         if ($null -eq $body) {
             $global:LASTEXITCODE = 1
@@ -68,6 +83,12 @@ function gh {
     if ($a[0] -eq 'api') {
         if ($a[1] -ne '--method' -or $a[4] -ne '--input') { throw 'Unexpected API write arguments.' }
         $method = $a[2]; $path = $a[3]; $body = Read-ReleaseJson $a[5]
+        if ($path -match '/releases$') {
+            if ($method -ne 'POST' -or $null -ne $script:mock.release -or !$body.draft -or $body.target_commitish -cne $script:mock.source) { throw 'Unsafe or duplicate draft creation.' }
+            $script:mock.creates++
+            $script:mock.release = @{ id = 42; tag_name = $body.tag_name; draft = $true; prerelease = $body.prerelease; assets = @() }
+            return ($script:mock.release | ConvertTo-Json)
+        }
         if ($path -match '/git/trees$') {
             $files = @{} + $script:mock.files
             foreach ($entry in $body.tree) { $files[$entry.path] = $entry.content }
@@ -95,10 +116,7 @@ function gh {
     }
     if ($a[0] -ne 'release') { throw 'Unexpected gh command in publisher test.' }
     switch ($a[1]) {
-        'create' {
-            if ($null -ne $script:mock.release -or '--draft' -notin $a -or '--verify-tag' -notin $a) { throw 'Unsafe draft creation.' }
-            $script:mock.release = @{ draft = $true; prerelease = ('--prerelease' -in $a); assets = @() }
-        }
+        'create' { throw 'Draft creation must use the API response, not a follow-up published-tag lookup.' }
         'upload' {
             $path = $a[3]; $name = Split-Path $path -Leaf
             if ($script:mock.assets.ContainsKey($name) -or '--clobber' -in $a) { throw 'Attempted overwrite of a release asset.' }
@@ -146,6 +164,7 @@ try {
     $failed = $false
     try { & $scriptPath -PackagesDirectory $PackagesDirectory -Tag "v$($metadata.version)" } catch { $failed = $true }
     if (!$failed -or $script:mock.head -or $script:mock.release.draft) { throw 'Failed catalog update was not recoverable after publication.' }
+    if ($script:mock.creates -ne 1 -or $script:mock.draftTagReads -lt 1 -or $script:mock.draftIdReads -lt 1) { throw 'Retry did not resume the existing draft through its release ID.' }
     $script:mock.failRef = $false
     & $scriptPath -PackagesDirectory $PackagesDirectory -Tag "v$($metadata.version)"
     $uploads = $script:mock.uploads; $refs = $script:mock.refs

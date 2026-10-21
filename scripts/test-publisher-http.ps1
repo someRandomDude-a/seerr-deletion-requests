@@ -31,6 +31,12 @@ foreach ($text in @(
     $result = ConvertFrom-GitHubApiResponse -Text $text -ExitCode 0 -Path $path
     if ($result.id -ne 42 -or !$result.draft) { throw 'Successful GitHub response was not parsed.' }
 }
+foreach ($count in @(0, 1, 100)) {
+    $items = @(for ($i = 0; $i -lt $count; $i++) { @{ id = ($i + 1); tag_name = "v0.1.0.$i" } })
+    $text = "HTTP/2.0 200 OK`nContent-Type: application/json`r`n`r`n$(ConvertTo-Json -InputObject $items -Compress)"
+    $result = @(ConvertFrom-GitHubApiResponse -Text $text -ExitCode 0 -Path $path)
+    if ($result.Count -ne $count) { throw 'Release-list response array was lost or unwrapped incorrectly.' }
+}
 if (Test-Path /bin/sh) {
     $fixture = Join-Path (Split-Path $PSScriptRoot -Parent) ('artifacts/http-tests/' + [guid]::NewGuid().ToString('N'))
     New-Item -ItemType Directory $fixture | Out-Null

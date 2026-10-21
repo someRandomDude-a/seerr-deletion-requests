@@ -50,6 +50,30 @@ function Send-GitHubJson {
     return ConvertTo-ReleaseData (ConvertFrom-Json -InputObject $result)
 }
 
+function Find-GitHubRelease {
+    $published = Get-GitHubJson "repos/$repository/releases/tags/$Tag" -AllowMissing
+    if ($null -ne $published) {
+        if ($published.tag_name -cne $Tag) { throw 'Published release tag changed.' }
+        return $published
+    }
+    # The tag endpoint excludes drafts. Authenticated release listings include pending draft tags.
+    $found = @()
+    for ($page = 1; $page -le 100; $page++) {
+        $releases = @(Get-GitHubJson "repos/$repository/releases?per_page=100&page=$page")
+        $found += @($releases | Where-Object { $_.tag_name -ceq $Tag })
+        if ($found.Count -gt 1) { throw 'Multiple releases match this tag; refusing an ambiguous publication.' }
+        if ($releases.Count -lt 100) {
+            if ($found.Count -eq 0) { return $null }
+            $id = [string]$found[0].id
+            if ($id -notmatch '^[1-9][0-9]{0,18}$') { throw 'Invalid release ID.' }
+            $releaseById = Get-GitHubJson "repos/$repository/releases/$id"
+            if ($releaseById.tag_name -cne $Tag) { throw 'Draft release tag changed.' }
+            return $releaseById
+        }
+    }
+    throw 'Release listing limit reached; refusing to assume a draft is missing.'
+}
+
 # Use the authenticated API rather than unauthenticated git ls-remote (also works for private repositories).
 $remoteTag = Get-GitHubJson "repos/$repository/git/ref/tags/$Tag"
 $remoteObject = $remoteTag.object
@@ -88,13 +112,14 @@ $notesFile = Join-Path $work 'release-notes.md'
 $notes = Get-PluginReleaseNotes $metadata.version
 $notes += "`n`nInstall using the architecture-specific $($metadata.channel) Jellyfin repository catalog. See https://github.com/$repository/blob/$Tag/docs/releases.md."
 [IO.File]::WriteAllText($notesFile, $notes, [Text.UTF8Encoding]::new($false))
-$release = Get-GitHubJson "repos/$repository/releases/tags/$Tag" -AllowMissing
+$release = Find-GitHubRelease
 if ($null -eq $release) {
-    $arguments = @('release', 'create', $Tag, '--repo', $repository, '--verify-tag', '--draft',
-        '--title', "$($metadata.name) $($metadata.version)", '--notes-file', $notesFile)
-    if ($metadata.channel -eq 'preview') { $arguments += '--prerelease' }
-    $null = Invoke-Gh $arguments
-    $release = Get-GitHubJson "repos/$repository/releases/tags/$Tag"
+    # Keep the returned ID/object: querying the tag immediately after creating a draft returns 404.
+    $release = Send-GitHubJson POST "repos/$repository/releases" @{
+        tag_name = $Tag; target_commitish = $head.Trim(); name = "$($metadata.name) $($metadata.version)"
+        body = $notes; draft = $true; prerelease = ($metadata.channel -eq 'preview'); make_latest = 'false'
+    }
+    if (!$release.draft -or $release.tag_name -cne $Tag) { throw 'Created release is not the expected draft.' }
 } elseif ([bool]$release.prerelease -ne ($metadata.channel -eq 'preview')) {
     throw 'Existing release channel disagrees with metadata.'
 }
