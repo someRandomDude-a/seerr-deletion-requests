@@ -2,6 +2,7 @@ param([Parameter(Mandatory)][string]$PackagesDirectory, [string]$Tag = '')
 $ErrorActionPreference = 'Stop'
 $previousExitCode = Get-Variable LASTEXITCODE -ValueOnly -ErrorAction SilentlyContinue
 . (Join-Path $PSScriptRoot 'release-common.ps1')
+& (Join-Path $PSScriptRoot 'test-publisher-http.ps1')
 Write-Host 'OFFLINE FIXTURE: git and gh are mocked; no real release or catalog is published.'
 # Offline contract test: both external executables are shadowed in this script's scope.
 # No GitHub request, git write, tag creation or release publication can occur here.
@@ -11,6 +12,7 @@ $script:mock = @{
     source = ('a' * 40); head = $null; tree = $null; release = $null
     files = @{}; pendingFiles = @{}; assets = @{}; uploads = 0; publishes = 0; refs = 0
     failUpload = $true; failRef = $false; calls = 0; lightweight = $false; remoteCommit = ('a' * 40)
+    readFailure = 0
 }
 $DeletionQueuePublisherMock = $script:mock
 $DeletionQueuePublisherFixture = $script:fixture
@@ -31,7 +33,7 @@ function gh {
     $a = @($args)
     $global:LASTEXITCODE = 0
     $script:mock.calls++
-    if ($a[0] -eq 'api' -and $a[1] -eq '-i') {
+    if ($a[0] -eq 'api' -and $a[1] -eq '--include') {
         $path = $a[2]
         $body = $null
         if ($path -match '/git/ref/tags/') {
@@ -49,11 +51,19 @@ function gh {
                 $body = @{ encoding = 'base64'; content = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes($script:mock.files[$file])) }
             }
         } elseif ($path -match '/releases/tags/') {
+            if ($script:mock.readFailure -ne 0) {
+                $global:LASTEXITCODE = 1
+                return "HTTP/2.0 $($script:mock.readFailure) Error`nContent-Type: application/json`r`n`r`n{`"status`":`"404`",`"message`":`"not a missing release`"}"
+            }
             $body = $script:mock.release
             if ($null -ne $body) { $body.assets = @($script:mock.assets.Keys | ForEach-Object { @{ name = $_ } }) }
         } else { throw "Unexpected API read in publisher test: $path" }
-        if ($null -eq $body) { $global:LASTEXITCODE = 1; return @('HTTP/2.0 404 Not Found', '', '{"message":"Not Found"}') }
-        return @('HTTP/2.0 200 OK', 'content-type: application/json', '', (ConvertTo-Json -InputObject $body -Depth 20 -Compress))
+        if ($null -eq $body) {
+            $global:LASTEXITCODE = 1
+            if ($path -match '/releases/tags/') { return '{"message":"Not Found","status":"404"}' }
+            return "HTTP/2.0 404 Not Found`nContent-Type: application/json`r`n`r`n{`"message`":`"Not Found`",`"status`":`"404`"}"
+        }
+        return "HTTP/2.0 200 OK`nContent-Type: application/json`r`n`r`n$(ConvertTo-Json -InputObject $body -Depth 20 -Compress)"
     }
     if ($a[0] -eq 'api') {
         if ($a[1] -ne '--method' -or $a[4] -ne '--input') { throw 'Unexpected API write arguments.' }
@@ -118,6 +128,16 @@ try {
     $env:GITHUB_SHA = $script:mock.source; $env:GH_TOKEN = 'offline-fixture-not-a-real-token'
     $metadata = Get-PluginReleaseMetadata -Tag $Tag
     $scriptPath = Join-Path $PSScriptRoot 'publish-release.ps1'
+    foreach ($code in @(401, 403, 429, 500)) {
+        $script:mock.readFailure = $code
+        $rejected = $false
+        try { & $scriptPath -PackagesDirectory $PackagesDirectory -Tag "v$($metadata.version)" }
+        catch { $rejected = $_.Exception.Message.Contains("HTTP $code;") }
+        if (!$rejected -or $null -ne $script:mock.release -or $script:mock.uploads -ne 0 -or $script:mock.refs -ne 0) {
+            throw 'API read error was treated as a missing release or caused a remote write.'
+        }
+    }
+    $script:mock.readFailure = 0
     $failed = $false
     $failure = $null
     try { & $scriptPath -PackagesDirectory $PackagesDirectory -Tag "v$($metadata.version)" } catch { $failed = $true; $failure = $_ }
@@ -143,7 +163,7 @@ try {
     $failed = $false
     try { & $scriptPath -PackagesDirectory $PackagesDirectory -Tag "v$($metadata.version)" } catch { $failed = $_.Exception.Message -like '*Remote tag moved*' }
     if (!$failed -or $script:mock.uploads -ne $uploads -or $script:mock.refs -ne $refs) { throw 'A moved tag was not rejected before publication.' }
-    Write-Host 'PASS: offline publisher contract: annotated/lightweight tags, moved-tag rejection, draft/upload/ref failures, retry, immutability and no force-push.'
+    Write-Host 'PASS: offline publisher contract: optional release 404, non-404 read failures without writes, annotated/lightweight tags, moved-tag rejection, draft/upload/ref failures, retry, immutability and no force-push.'
 } finally {
     foreach ($name in $names) { [Environment]::SetEnvironmentVariable($name, $saved[$name]) }
     $global:LASTEXITCODE = if ($null -eq $previousExitCode) { 0 } else { $previousExitCode }

@@ -145,6 +145,37 @@ function Get-ReleaseHash {
     return (Get-FileHash -LiteralPath $Path -Algorithm $Algorithm).Hash.ToLowerInvariant()
 }
 
+function ConvertFrom-GitHubApiResponse {
+    param([string]$Text, [int]$ExitCode, [string]$Path, [switch]$AllowMissing)
+    $text = $Text.Replace("`r`n", "`n").TrimStart([char]0xfeff)
+    $status = [regex]::Match($text, '\AHTTP/\S+\s+(\d{3})\b[^\n]*\n')
+    $httpStatus = $null
+    $body = $text
+    if ($status.Success) {
+        $httpStatus = [int]$status.Groups[1].Value
+        $split = $text.IndexOf("`n`n")
+        if ($split -lt 0) { throw "Malformed GitHub API response: $Path" }
+        $body = $text.Substring($split + 2)
+    }
+    $json = $null
+    try { $json = ConvertTo-ReleaseData (ConvertFrom-Json -InputObject $body) } catch {
+        if ($ExitCode -eq 0 -and $httpStatus -ge 200 -and $httpStatus -lt 300) { throw "Malformed GitHub API JSON: $Path" }
+    }
+    # Some CLI/error-output paths expose only GitHub's JSON error envelope, not the status line.
+    # A real HTTP status always wins over any field in the body (e.g. HTTP 403 with status=404).
+    if ($null -eq $httpStatus -and $ExitCode -ne 0 -and $null -ne $json -and $json -is [System.Collections.IDictionary] -and $json.Contains('status')) {
+        $code = 0
+        if ([int]::TryParse([string]$json['status'], [ref]$code) -and $code -ge 400 -and $code -le 599) { $httpStatus = $code }
+    }
+    if ($AllowMissing -and $ExitCode -ne 0 -and $httpStatus -eq 404) { return $null }
+    if ($ExitCode -ne 0 -or $null -eq $httpStatus -or $httpStatus -lt 200 -or $httpStatus -ge 300) {
+        $label = if ($null -eq $httpStatus) { 'unknown' } else { [string]$httpStatus }
+        throw "GitHub API read failed: $Path (HTTP $label; gh exit $ExitCode)."
+    }
+    if ($null -eq $json) { throw "Missing GitHub API JSON: $Path" }
+    return $json
+}
+
 function Assert-NativeLibrary {
     param([string]$Path, [string]$Runtime)
     $bytes = [IO.File]::ReadAllBytes($Path)

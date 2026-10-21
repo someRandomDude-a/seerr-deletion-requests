@@ -30,16 +30,17 @@ function Invoke-Gh {
 }
 function Get-GitHubJson {
     param([string]$Path, [switch]$AllowMissing)
-    $result = & gh api -i $Path 2>$null
-    $exitCode = $LASTEXITCODE
-    $text = $result -join "`n"
-    if ($exitCode -ne 0) {
-        if ($AllowMissing -and $text -match '^HTTP/\S+ 404\b') { return $null }
-        throw "GitHub API read failed: $Path"
+    $responseFile = Join-Path $work ([guid]::NewGuid().ToString('N') + '.response')
+    try {
+        # Preserve native stdout framing; do not depend on PowerShell's line-array conversion.
+        $PSNativeCommandUseErrorActionPreference = $false
+        & gh api --include $Path 1> $responseFile 2>$null
+        $exitCode = $LASTEXITCODE
+        $text = [IO.File]::ReadAllText($responseFile)
+        return ConvertFrom-GitHubApiResponse -Text $text -ExitCode $exitCode -Path $Path -AllowMissing:$AllowMissing
+    } finally {
+        if (Test-Path -LiteralPath $responseFile) { Remove-Item -LiteralPath $responseFile -Force }
     }
-    $split = $text.IndexOf("`n`n")
-    if ($split -lt 0) { throw 'Malformed GitHub API response.' }
-    return ConvertTo-ReleaseData (ConvertFrom-Json -InputObject $text.Substring($split + 2))
 }
 function Send-GitHubJson {
     param([string]$Method, [string]$Path, $Body)
