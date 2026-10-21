@@ -1,0 +1,11 @@
+[
+  {
+    "guid": "3de88ba1-6d5c-49f5-854b-65a72f473f21",
+    "name": "Deletion queue",
+    "description": "Safety preview: anonymous consent-protected proposals and native administrator monitoring. Destructive execution is unavailable pending verified Seerr target pinning and independent rollback protection.",
+    "overview": "Consent-protected Seerr deletion proposals for Jellyfin.",
+    "owner": "someRandomDude-a",
+    "category": "General",
+    "versions": []
+  }
+]

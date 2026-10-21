@@ -1,0 +1,20 @@
+[
+  {
+    "guid": "3de88ba1-6d5c-49f5-854b-65a72f473f21",
+    "name": "Deletion queue",
+    "description": "Safety preview: anonymous consent-protected proposals and native administrator monitoring. Destructive execution is unavailable pending verified Seerr target pinning and independent rollback protection.",
+    "overview": "Consent-protected Seerr deletion proposals for Jellyfin.",
+    "owner": "someRandomDude-a",
+    "category": "General",
+    "versions": [
+      {
+        "version": "0.1.0.5",
+        "changelog": "- Derive DLL, installed manifest, package and repository versions from the triggering Git tag without a source-version bump.\n- Preserve earlier catalog entries and immutable assets while advertising newer compatible versions to existing Jellyfin installations.\n- Verify tag/ref consistency and two-version upgrade history in release tests.\n\n**Automatic deletion remains unavailable** in this safety preview; versioning and updates do not bypass execution safety gates.",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/someRandomDude-a/seerr-deletion-requests/releases/download/v0.1.0.5/DeletionQueue-0.1.0.5-linux-arm64.zip",
+        "checksum": "ae5fbde208f6fae064b73271e46b911c",
+        "timestamp": "2026-10-21T13:58:39Z"
+      }
+    ]
+  }
+]
