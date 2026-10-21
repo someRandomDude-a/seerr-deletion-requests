@@ -22,7 +22,9 @@ $null = Get-PluginReleaseNotes $metadata.version
 $work = Join-Path $root ("artifacts/release-tests/" + [guid]::NewGuid().ToString('N'))
 $packages = Join-Path $work 'packages'
 $catalogs = Join-Path $work 'catalogs'
-$runtimes = if ($Runtime -eq 'all') { @('linux-x64', 'linux-arm64', 'win-x64') } else { @($Runtime) }
+[string[]]$runtimes = if ($Runtime -eq 'all') { @('linux-x64', 'linux-arm64', 'win-x64') } else { @($Runtime) }
+$expectedFirstRuntime = if ($Runtime -eq 'all') { 'linux-x64' } else { $Runtime }
+Assert-Check ($runtimes -is [array] -and $runtimes[0] -ceq $expectedFirstRuntime) 'Runtime selection must preserve complete runtime identifiers in an array.'
 foreach ($rid in $runtimes) {
     & (Join-Path $PSScriptRoot 'package.ps1') -Dotnet $Dotnet -Runtime $rid -OutputDirectory $packages
     $descriptor = Join-Path $packages "DeletionQueue-$($metadata.version)-$rid.package.json"
