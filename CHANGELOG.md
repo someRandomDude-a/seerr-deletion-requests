@@ -9,6 +9,7 @@ Initial **safety-preview** release for Jellyfin 12.2 / .NET 10.
 - Encrypted authenticated journal and tested one-shot execution/recovery domain.
 - Architecture-specific packages and Jellyfin repository manifests with retained version history.
 - Bounded background collection, strict hostile-input validation and storage/worker fault isolation.
+- Pin the SQLitePCLRaw bundle to 2.1.14 to remove the vulnerable native SQLite dependency (CVE-2025-6965); NuGet audit remains enabled.
 - Installed Jellyfin theme/control CSS and a private notification bell with explicit subscriptions/read acknowledgements.
 - Latest-stable Server/Web compatibility, browser and corrupt-storage survival checks, also gating releases.
 

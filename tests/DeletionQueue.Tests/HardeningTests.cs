@@ -8,6 +8,16 @@ namespace DeletionQueue.Tests;
 
 public sealed class HardeningTests
 {
+    [Fact] public void BundledSqliteIncludesTheCve20256965Fix()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        using var query = connection.CreateCommand();
+        query.CommandText = "SELECT sqlite_version()";
+        var version = Version.Parse((string)query.ExecuteScalar()!);
+        Assert.True(version >= new Version(3, 50, 2), $"Loaded SQLite {version} is affected by CVE-2025-6965.");
+    }
+
     [Fact] public void NoticeReadsArePrivateExplicitAndDoNotChangeConsentOrActivity()
     {
         var state = QueueRulesTests.State(); var proposal = QueueRulesTests.Propose(state);

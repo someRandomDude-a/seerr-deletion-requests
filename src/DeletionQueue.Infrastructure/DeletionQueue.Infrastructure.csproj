@@ -2,5 +2,7 @@
   <ItemGroup>
     <ProjectReference Include="../DeletionQueue.Core/DeletionQueue.Core.csproj" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.0" />
+    <!-- Override its vulnerable 2.1.11 bundle (GHSA-2m69-gcr7-jv3q), keeping the SQLitePCLRaw family aligned. -->
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.14" />
   </ItemGroup>
 </Project>
