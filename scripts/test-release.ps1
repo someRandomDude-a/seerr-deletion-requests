@@ -1,6 +1,7 @@
 param(
     [string]$Dotnet = 'dotnet',
-    [ValidateSet('all', 'linux-x64', 'linux-arm64', 'win-x64')][string]$Runtime = 'all'
+    [ValidateSet('all', 'linux-x64', 'linux-arm64', 'win-x64')][string]$Runtime = 'all',
+    [string]$Tag = ''
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'release-common.ps1')
@@ -12,9 +13,11 @@ function Assert-Rejected {
     Assert-Check $rejected $Message
 }
 $root = Split-Path $PSScriptRoot -Parent
-$metadata = Get-PluginReleaseMetadata $root
+& (Join-Path $PSScriptRoot 'test-release-metadata.ps1')
+$metadata = Get-PluginReleaseMetadata -Root $root -Tag $Tag
 Assert-ReleaseTag "v$($metadata.version)" $metadata
-Assert-Rejected { Assert-ReleaseTag 'v999.0.0.0' $metadata } 'A mismatched tag was accepted.'
+$otherVersion = if ($metadata.version -eq '0.0.0.0') { '0.0.0.1' } else { '0.0.0.0' }
+Assert-Rejected { Assert-ReleaseTag "v$otherVersion" $metadata } 'A mismatched tag was accepted.'
 foreach ($invalid in @('1.2.3', '01.2.3.4', '1.2.3.4-preview.1', '1.2.3.65535', '../1.2.3.4')) {
     Assert-Rejected { Assert-NumericVersion $invalid } "Invalid version accepted: $invalid"
 }
@@ -22,15 +25,16 @@ $null = Get-PluginReleaseNotes $metadata.version
 $work = Join-Path $root ("artifacts/release-tests/" + [guid]::NewGuid().ToString('N'))
 $packages = Join-Path $work 'packages'
 $catalogs = Join-Path $work 'catalogs'
+# Conditional pipeline output unwraps a single string; keep [0] indexing runtime IDs, not characters.
 [string[]]$runtimes = if ($Runtime -eq 'all') { @('linux-x64', 'linux-arm64', 'win-x64') } else { @($Runtime) }
 $expectedFirstRuntime = if ($Runtime -eq 'all') { 'linux-x64' } else { $Runtime }
 Assert-Check ($runtimes -is [array] -and $runtimes[0] -ceq $expectedFirstRuntime) 'Runtime selection must preserve complete runtime identifiers in an array.'
 foreach ($rid in $runtimes) {
-    & (Join-Path $PSScriptRoot 'package.ps1') -Dotnet $Dotnet -Runtime $rid -OutputDirectory $packages
+    & (Join-Path $PSScriptRoot 'package.ps1') -Dotnet $Dotnet -Runtime $rid -OutputDirectory $packages -Tag "v$($metadata.version)"
     $descriptor = Join-Path $packages "DeletionQueue-$($metadata.version)-$rid.package.json"
     $null = Test-ReleasePackage $descriptor $metadata
 }
-Assert-Rejected { & (Join-Path $PSScriptRoot 'package.ps1') -Dotnet $Dotnet -Runtime $runtimes[0] -OutputDirectory $packages } 'Existing output was overwritten.'
+Assert-Rejected { & (Join-Path $PSScriptRoot 'package.ps1') -Dotnet $Dotnet -Runtime $runtimes[0] -OutputDirectory $packages -Tag "v$($metadata.version)" } 'Existing output was overwritten.'
 $firstDescriptor = Join-Path $packages "DeletionQueue-$($metadata.version)-$($runtimes[0]).package.json"
 $first = Read-ReleaseJson $firstDescriptor
 $zip = Join-Path $packages $first.asset
@@ -78,8 +82,8 @@ foreach ($channel in @('stable', 'preview')) {
         $path = Join-Path $catalogs "$channel/manifest-$rid.json"
         $catalog = Read-ReleaseJson $path
         $catalog[0].versions += [ordered]@{
-            version = '0.0.0.0'; targetAbi = $metadata.targetAbi; changelog = 'Synthetic historical stable release.'
-            sourceUrl = "https://github.com/$repository/releases/download/v0.0.0.0/DeletionQueue-0.0.0.0-$rid.zip"
+            version = $otherVersion; targetAbi = $metadata.targetAbi; changelog = 'Synthetic retained release.'
+            sourceUrl = "https://github.com/$repository/releases/download/v$otherVersion/DeletionQueue-$otherVersion-$rid.zip"
             checksum = ('a' * 32); timestamp = '2026-01-01T00:00:00Z'
         }
         Write-ReleaseJson $path $catalog
@@ -92,7 +96,7 @@ foreach ($file in (Get-ChildItem $catalogs -Filter '*.json' -Recurse -File)) {
     if (Get-Command Test-Json -ErrorAction SilentlyContinue) {
         Assert-Check (Test-Json -Json ([IO.File]::ReadAllText($file.FullName)) -SchemaFile (Join-Path $root 'manifests/repository.schema.json')) 'Catalog failed JSON schema validation.'
     }
-    Assert-Check (@($catalog[0].versions | Where-Object { $_.version -eq '0.0.0.0' }).Count -eq 1) 'Historical version was omitted.'
+    Assert-Check (@($catalog[0].versions | Where-Object { $_.version -eq $otherVersion }).Count -eq 1) 'Historical version was omitted.'
     $before[$file.FullName] = Get-ReleaseHash $file.FullName SHA256
 }
 Update-Catalogs
@@ -112,5 +116,6 @@ try {
 } finally { [IO.File]::WriteAllBytes($firstDescriptor, $backup) }
 foreach ($path in $before.Keys) { Assert-Check ((Get-ReleaseHash $path SHA256) -ceq $before[$path]) 'Rejected update partially modified catalogs.' }
 Write-Host 'PASS: architecture-specific URLs, MD5 compatibility, channel isolation, history retention, idempotency and immutable version rejection.'
-& (Join-Path $PSScriptRoot 'test-publisher.ps1') -PackagesDirectory $packages
+& (Join-Path $PSScriptRoot 'test-publisher.ps1') -PackagesDirectory $packages -Tag "v$($metadata.version)"
+& (Join-Path $PSScriptRoot 'test-catalog-upgrades.ps1') -PackagesDirectory $packages -Tag "v$($metadata.version)" -Dotnet $Dotnet
 Write-Host "Release fixtures retained at $work"
