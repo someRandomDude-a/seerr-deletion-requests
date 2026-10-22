@@ -39,8 +39,7 @@ jobs:
       - run: dotnet build DeletionQueue.slnx -c Release
       - run: dotnet test DeletionQueue.slnx -c Release --no-build
       - run: node --check src/Jellyfin.Plugin.DeletionQueue/Web/admin.js
-      - run: node --check src/Jellyfin.Plugin.DeletionQueue/Web/user.js
-      - run: node --check src/Jellyfin.Plugin.DeletionQueue/Web/theme.js
+      - run: node --check src/Jellyfin.Plugin.DeletionQueue/Web/integrated.js
       - name: Validate packaging and manifest behavior
         shell: pwsh
         env:
