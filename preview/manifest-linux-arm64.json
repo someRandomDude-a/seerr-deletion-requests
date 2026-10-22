@@ -2,11 +2,19 @@
   {
     "guid": "3de88ba1-6d5c-49f5-854b-65a72f473f21",
     "name": "Deletion queue",
-    "description": "Safety preview: anonymous consent-protected proposals and native administrator monitoring. Destructive execution is unavailable pending verified Seerr target pinning and independent rollback protection.",
+    "description": "Integrated Jellyfin media/request removal proposals, private notifications and consent-protected Seerr-managed deletion. Seerr controls Arr targeting/files; authenticated local storage has no independent rollback witness.",
     "overview": "Consent-protected Seerr deletion proposals for Jellyfin.",
     "owner": "someRandomDude-a",
     "category": "General",
     "versions": [
+      {
+        "version": "0.1.0.7",
+        "changelog": "- Add optional per-proposal administrator approval (default off), with target/activity/policy snapshots and live role/visibility checks; viewer consent and deadline floors still apply.\n- Remove the standalone queue route/redirect, old UI/theme assets, stylesheet scanner/service and obsolete standalone styling/tests. Retain the integrated backing API and authenticated historical records.\n\n- Derive DLL, installed manifest, package and repository versions from the triggering Git tag without a source-version bump.\n- Preserve earlier catalog entries and immutable assets while advertising newer compatible versions to existing Jellyfin installations.\n- Verify tag/ref consistency and two-version upgrade history in release tests.\n\n- Integrate original request-time Web injection, media/detail/context-menu actions and available Enhanced Requests removal actions; retire standalone identifier-entry UI.\n- Add a top-bar notification center with unseen badges, automatic relevant notices/opt-out, explicit read acknowledgement and session clearing.\n- Add user dropdown/reset and secure administrator import of Enhanced's Seerr settings.\n- Connect one-shot Seerr-managed removal with bounded all-account/related-item activity scans and read-only uncertain-outcome reconciliation.\n- Accept Seerr-controlled targeting/files and local authenticated seals as the configured trust boundary; no Seerr-side component or independent rollback witness.\n- Require a new explicit real-deletion acknowledgement on upgrade; preserve older preview opt-ins without activating the new transport.\n\n**Automatic deletion is available only after explicit acknowledgement, current consent, complete activity coverage and delay.** Seerr's reported result is trusted; a whole-installation consistent backup rollback is not detectable. Live Arr/media deletion is not certified by the no-media browser fixture.",
+        "targetAbi": "12.2.0.0",
+        "sourceUrl": "https://github.com/someRandomDude-a/seerr-deletion-requests/releases/download/v0.1.0.7/DeletionQueue-0.1.0.7-linux-arm64.zip",
+        "checksum": "eeff9fd0b7f9f695c218b51a6ecfed9f",
+        "timestamp": "2026-10-22T05:04:28Z"
+      },
       {
         "version": "0.1.0.5",
         "changelog": "- Derive DLL, installed manifest, package and repository versions from the triggering Git tag without a source-version bump.\n- Preserve earlier catalog entries and immutable assets while advertising newer compatible versions to existing Jellyfin installations.\n- Verify tag/ref consistency and two-version upgrade history in release tests.\n\n**Automatic deletion remains unavailable** in this safety preview; versioning and updates do not bypass execution safety gates.",
