@@ -2,11 +2,21 @@
 
 ## [Unreleased]
 
+- Add optional per-proposal administrator approval (default off), with target/activity/policy snapshots and live role/visibility checks; viewer consent and deadline floors still apply.
+- Remove the standalone queue route/redirect, old UI/theme assets, stylesheet scanner/service and obsolete standalone styling/tests. Retain the integrated backing API and authenticated historical records.
+
 - Derive DLL, installed manifest, package and repository versions from the triggering Git tag without a source-version bump.
 - Preserve earlier catalog entries and immutable assets while advertising newer compatible versions to existing Jellyfin installations.
 - Verify tag/ref consistency and two-version upgrade history in release tests.
 
-**Automatic deletion remains unavailable** in this safety preview; versioning and updates do not bypass execution safety gates.
+- Integrate original request-time Web injection, media/detail/context-menu actions and available Enhanced Requests removal actions; retire standalone identifier-entry UI.
+- Add a top-bar notification center with unseen badges, automatic relevant notices/opt-out, explicit read acknowledgement and session clearing.
+- Add user dropdown/reset and secure administrator import of Enhanced's Seerr settings.
+- Connect one-shot Seerr-managed removal with bounded all-account/related-item activity scans and read-only uncertain-outcome reconciliation.
+- Accept Seerr-controlled targeting/files and local authenticated seals as the configured trust boundary; no Seerr-side component or independent rollback witness.
+- Require a new explicit real-deletion acknowledgement on upgrade; preserve older preview opt-ins without activating the new transport.
+
+**Automatic deletion is available only after explicit acknowledgement, current consent, complete activity coverage and delay.** Seerr's reported result is trusted; a whole-installation consistent backup rollback is not detectable. Live Arr/media deletion is not certified by the no-media browser fixture.
 
 ## [0.1.0.0]
 

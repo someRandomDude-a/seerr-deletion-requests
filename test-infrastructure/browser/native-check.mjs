@@ -26,14 +26,18 @@ try {
     // Revoke the fixture's earlier opt-in so the confirmation can be exercised without any deletion transport.
     if (await page.locator('#dqAuto').isChecked()) await page.locator('label:has(#dqAuto)').click();
     assert.equal(await page.locator('#dqAuto').isChecked(), false);
-    await page.getByLabel('dq-viewer', { exact: true }).selectOption('2');
+    await page.locator('#dqUsers').selectOption({ label: 'dq-viewer' });
+    await page.locator('#dqUserAuthority').selectOption('2');
+    assert.equal(await page.locator('#dqRequireAdminApproval').isChecked(), false);
+    await page.locator('label:has(#dqRequireAdminApproval)').click();
     const revoked = page.waitForResponse(r => r.url().endsWith('/DeletionQueue/admin/policy') && r.request().method() === 'PATCH');
     const refreshed = page.waitForResponse(r => r.url().endsWith('/DeletionQueue/admin/status'));
     await page.locator('#dqPolicy button[type=submit]').click();
     assert.equal((await revoked).status(), 204);
     await refreshed;
     await page.waitForFunction(() => document.getElementById('deletionQueueAdmin').getAttribute('aria-busy') === 'false');
-    await page.waitForFunction(() => Array.from(document.querySelectorAll('#dqAccounts select')).some(s => s.value === '2'));
+    await page.waitForFunction(() => document.getElementById('dqUserAuthority').value === '2');
+    assert.equal(await page.locator('#dqRequireAdminApproval').isChecked(), true);
     let writes = 0;
     page.on('request', r => { if (r.url().endsWith('/DeletionQueue/admin/policy') && r.method() === 'PATCH') writes++; });
     await page.locator('label:has(#dqAuto)').click();
@@ -51,5 +55,16 @@ try {
     await page.locator('#dqOptInYes').click();
     assert.equal((await confirmed).status(), 204);
     assert.equal(writes, 1);
-    console.log('PASS: real native Web login/admin rendering, themed controls, explicit opt-in dialog and cancel safety.');
+    await page.waitForFunction(() => document.getElementById('deletionQueueAdmin').getAttribute('aria-busy') === 'false');
+    page.once('dialog', d => d.accept());
+    const reset = page.waitForResponse(r => /\/DeletionQueue\/admin\/users\/[^/]+\/reset$/.test(r.url()));
+    await page.locator('#dqResetUser').click(); assert.equal((await reset).status(), 204);
+    await page.waitForFunction(() => document.getElementById('dqUserAuthority').value === '');
+    assert.equal(await page.locator('#dqRequireAdminApproval').isChecked(), true);
+    // Leave the disposable fixture with real deletion explicitly OFF.
+    await page.locator('label:has(#dqAuto)').click();
+    await page.locator('label:has(#dqRequireAdminApproval)').click();
+    const disabled = page.waitForResponse(r => r.url().endsWith('/DeletionQueue/admin/policy') && r.request().method() === 'PATCH');
+    await page.locator('#dqPolicy button[type=submit]').click(); assert.equal((await disabled).status(), 204);
+    console.log('PASS: real native Web login/admin rendering, user dropdown/reset, themed controls, explicit real-deletion opt-in and cancel safety.');
 } finally { await browser.close(); }

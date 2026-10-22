@@ -18,8 +18,8 @@ public sealed class ExecutionTests : IDisposable
         public Task<ExecutionPreflight> PreflightAsync(Proposal p, CancellationToken ct) => Task.FromResult(new ExecutionPreflight(Evidence, p.Revision));
         public Task<bool> AnchorClaimAsync(ExecutionClaim c, CancellationToken ct) => Task.FromResult(Anchored);
         public Task<bool> RecheckBeforeDispatchAsync(Proposal p, CancellationToken ct) => Task.FromResult(Rechecked);
-        public Task DeletePinnedOnceAsync(Proposal p, CancellationToken ct) { Deletes++; if (Timeout) throw new TimeoutException(); return Task.CompletedTask; }
-        public Task<DeletionProof?> InspectPinnedFilesAsync(Proposal p, CancellationToken ct) => Task.FromResult(Proof ? new DeletionProof(p.Target.Fingerprint, "verified-files-absent") : null);
+        public Task DeleteOnceAsync(Proposal p, CancellationToken ct) { Deletes++; if (Timeout) throw new TimeoutException(); return Task.CompletedTask; }
+        public Task<DeletionProof?> InspectOutcomeAsync(Proposal p, CancellationToken ct) => Task.FromResult(Proof ? new DeletionProof(p.Target.Fingerprint, "verified-files-absent") : null);
     }
 
     private static Guid Seed(AuthenticatedStore store)
@@ -28,6 +28,7 @@ public sealed class ExecutionTests : IDisposable
         {
             state.CoverageHealthy = true; state.CoverageSince = QueueRulesTests.Now.AddDays(-30);
             state.LastHeartbeat = QueueRulesTests.Now.AddHours(48); state.Policy.AutomaticDeletion = true;
+            state.Policy.SeerrManagedDeletionAcknowledged = true;
             var p = QueueRulesTests.Propose(state); QueueRulesTests.Evaluate(state, p);
             state.LastHeartbeat = QueueRulesTests.Now.AddHours(48); return p.Id;
         });
@@ -72,7 +73,7 @@ public sealed class ExecutionTests : IDisposable
     [Fact] public async Task MissingRemoteCapabilitiesPreventsEvenAClaim()
     {
         using var store = new AuthenticatedStore(directory); var id = Seed(store);
-        var gateway = new Gateway { Evidence = QueueRulesTests.Good with { RemotePreconditionsSupported = false } };
+        var gateway = new Gateway { Evidence = QueueRulesTests.Good with { SeerrDelegationVerified = false } };
         await Assert.ThrowsAsync<QueueException>(() => new ExecutionCoordinator(store, gateway, new Clock(QueueRulesTests.Now.AddHours(48))).ExecuteAsync(id, default));
         Assert.Null(QueueRules.Find(store.Read(), id).Claim); Assert.Equal(0, gateway.Deletes);
     }

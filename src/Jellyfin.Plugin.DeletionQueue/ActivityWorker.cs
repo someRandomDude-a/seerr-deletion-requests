@@ -12,7 +12,7 @@ using Microsoft.Extensions.Logging;
 namespace Jellyfin.Plugin.DeletionQueue;
 
 public sealed class ActivityWorker(QueueRuntime runtime, TargetResolver resolver, LiveIdentity identity,
-    ISessionManager sessions, IUserDataManager userData, TimeProvider clock, ILogger<ActivityWorker> logger) : BackgroundService
+    ISessionManager sessions, IUserDataManager userData, TimeProvider clock, ILogger<ActivityWorker> logger, ActivityFence fence) : BackgroundService
 {
     private sealed record Captured(Guid Item, Guid[] Users, string? Session, bool Stopped, DateTimeOffset At);
     private readonly Channel<Captured> events = Channel.CreateBounded<Captured>(new BoundedChannelOptions(256)
@@ -39,6 +39,7 @@ public sealed class ActivityWorker(QueueRuntime runtime, TargetResolver resolver
                 foreach (var p in state.Proposals.Where(p => p.Status == ProposalStatus.Claimed)) QueueRules.Uncertain(state, p.Id);
                 return true;
             });
+            runtime.MarkCollectorStarted();
             lastUtc = clock.GetUtcNow(); lastTimestamp = Stopwatch.GetTimestamp();
             var nextTick = Stopwatch.GetTimestamp();
             while (!stoppingToken.IsCancellationRequested)
@@ -53,6 +54,7 @@ public sealed class ActivityWorker(QueueRuntime runtime, TargetResolver resolver
                         foreach (var user in captured.Users) QueueRules.RecordActivity(state, user, key, captured.Session, captured.Stopped, captured.At);
                         return true;
                     });
+                    fence.Captured();
                 }
                 if (Stopwatch.GetTimestamp() >= nextTick)
                 { Tick(); nextTick = Stopwatch.GetTimestamp() + (30 * Stopwatch.Frequency); }
@@ -97,7 +99,9 @@ public sealed class ActivityWorker(QueueRuntime runtime, TargetResolver resolver
                 var authorized = owner.Enabled && resolver.Accessible(owner.Id, p.Target.JellyfinItemId) &&
                     QueueRules.Authority(state, owner.Id) != ProposalAuthority.Denied &&
                     (QueueRules.Authority(state, owner.Id) == ProposalAuthority.AnyAccessibleItem || p.Target.OwnRequestVerified);
-                QueueRules.Evaluate(state, p, new EvaluationEvidence(authorized, false, false, false, false), now);
+                // The execution worker supplies fresh target/inventory evidence. Do not erase its eligibility epoch here.
+                if (!authorized || !state.CoverageHealthy)
+                    QueueRules.Evaluate(state, p, new EvaluationEvidence(authorized, false, false, true, true), now);
                 if (previous != (p.Status, p.Reason, p.NotBefore, p.EligibleSince, p.DelayFloorHours)) p.Revision++;
             }
             return true;
@@ -124,7 +128,8 @@ public sealed class ActivityWorker(QueueRuntime runtime, TargetResolver resolver
                 if (stopped) progress.Remove(session);
                 else { if (progress.Count >= 1024 && !progress.ContainsKey(session)) { runtime.MarkCollectorFailed(); return; } progress[session] = (position, now); }
             }
-            if (!events.Writer.TryWrite(new Captured(e.Item.Id, users, session, stopped, now))) runtime.MarkCollectorFailed();
+            fence.Capturing();
+            if (!events.Writer.TryWrite(new Captured(e.Item.Id, users, session, stopped, now))) { fence.Captured(); runtime.MarkCollectorFailed(); }
         }
         catch (Exception) { runtime.MarkCollectorFailed(); }
     }
@@ -134,7 +139,8 @@ public sealed class ActivityWorker(QueueRuntime runtime, TargetResolver resolver
         {
             if (e.SaveReason is not (UserDataSaveReason.TogglePlayed or UserDataSaveReason.UpdateUserRating or UserDataSaveReason.UpdateUserData) ||
                 e.Item is not (Movie or Series or Episode or Season)) return;
-            if (!events.Writer.TryWrite(new Captured(e.Item.Id, [e.UserId], null, false, clock.GetUtcNow()))) runtime.MarkCollectorFailed();
+            fence.Capturing();
+            if (!events.Writer.TryWrite(new Captured(e.Item.Id, [e.UserId], null, false, clock.GetUtcNow()))) { fence.Captured(); runtime.MarkCollectorFailed(); }
         }
         catch (Exception) { runtime.MarkCollectorFailed(); }
     }

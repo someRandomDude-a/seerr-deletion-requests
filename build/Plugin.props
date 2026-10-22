@@ -7,8 +7,8 @@
     <PluginOwner>someRandomDude-a</PluginOwner>
     <PluginCategory>General</PluginCategory>
     <PluginOverview>Consent-protected Seerr deletion proposals for Jellyfin.</PluginOverview>
-    <PluginDescription>Safety preview: anonymous consent-protected proposals and native administrator monitoring. Destructive execution is unavailable pending verified Seerr target pinning and independent rollback protection.</PluginDescription>
-    <PluginReleaseChannel>preview</PluginReleaseChannel>
+    <PluginDescription>Integrated Jellyfin media/request removal proposals, private notifications and consent-protected Seerr-managed deletion. Seerr controls Arr targeting/files; authenticated local storage has no independent rollback witness.</PluginDescription>
+    <PluginReleaseChannel>stable</PluginReleaseChannel>
     <PluginTargetAbi>12.2.0.0</PluginTargetAbi>
     <PluginSdkVersion>12.2.0</PluginSdkVersion>
     <Version>$(PluginVersion)</Version>

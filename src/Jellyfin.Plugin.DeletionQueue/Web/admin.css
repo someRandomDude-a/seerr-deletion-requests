@@ -1,0 +1,4 @@
+/* Administrator workspace layout; Jellyfin supplies control styling. */
+#deletionQueueAdmin .dq-evidence { white-space: pre-wrap; overflow-wrap: anywhere; }
+#deletionQueueAdmin #dqOptInDialog { inset: 0; margin: auto; max-width: min(38rem, 90vw); max-height: 80vh; overflow: auto; }
+#deletionQueueAdmin .dq-dialog-content { padding-inline: 1.5rem; }

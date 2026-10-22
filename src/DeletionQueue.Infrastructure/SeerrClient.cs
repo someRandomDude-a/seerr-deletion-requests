@@ -5,18 +5,18 @@ using System.Net.Sockets;
 
 namespace DeletionQueue.Infrastructure;
 
-/// <summary>Read-only stock-Seerr adapter. Deliberately no generic HTTP forwarding or Arr writes.</summary>
+/// <summary>Bounded stock-Seerr adapter. No generic forwarding, direct Arr writes or request-history deletion.</summary>
 public sealed class SeerrClient : IDisposable
 {
     private readonly HttpClient http;
 
-    public SeerrClient(Uri baseUri, string apiKey)
+    public SeerrClient(Uri baseUri, string apiKey, HttpMessageHandler? handler = null)
     {
         if (!baseUri.IsAbsoluteUri || baseUri.Scheme is not ("http" or "https") ||
             !string.IsNullOrEmpty(baseUri.UserInfo) || !string.IsNullOrEmpty(baseUri.Query) || !string.IsNullOrEmpty(baseUri.Fragment))
             throw new ArgumentException("A configured HTTP(S) Seerr base URL is required.");
         if (apiKey.Length is 0 or > 512 || apiKey.Any(c => c < 33 || c > 126)) throw new ArgumentException("Invalid API key.");
-        http = new HttpClient(new SocketsHttpHandler
+        http = new HttpClient(handler ?? new SocketsHttpHandler
         {
             AllowAutoRedirect = false, UseProxy = false, ConnectTimeout = TimeSpan.FromSeconds(3), MaxResponseHeadersLength = 16,
             ConnectCallback = async (context, ct) =>
@@ -38,6 +38,15 @@ public sealed class SeerrClient : IDisposable
     public async Task<JsonElement> RequestAsync(int id, CancellationToken ct) => await GetAsync($"request/{Positive(id)}", ct);
     public async Task<JsonElement> UserAsync(int id, CancellationToken ct) => await GetAsync($"user/{Positive(id)}", ct);
     public async Task<JsonElement> JellyfinSettingsAsync(CancellationToken ct) => await GetAsync("settings/jellyfin", ct);
+    public async Task<JsonElement> MediaRecordAsync(int id, CancellationToken ct) => await GetAsync($"media/{Positive(id)}", ct);
+
+    // Exactly one application-level attempt, no redirect/retry loop. Only the file endpoint, never /request or /media/{id}.
+    public async Task DeleteFilesOnceAsync(int id, bool is4K, CancellationToken ct)
+    {
+        using var request = new HttpRequestMessage(HttpMethod.Delete, $"media/{Positive(id)}/file?is4k={(is4K ? "true" : "false")}");
+        using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, ct);
+        if (response.StatusCode != HttpStatusCode.NoContent) throw new HttpRequestException("Seerr deletion outcome unverified.");
+    }
 
     private async Task<JsonElement> GetAsync(string path, CancellationToken ct)
     {

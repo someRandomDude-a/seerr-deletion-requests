@@ -33,7 +33,7 @@ const admin = value(login, 'AccessToken'), adminId = value(value(login, 'User'),
 await call('GET', '/DeletionQueue/proposals', undefined, undefined, [401, 403]);
 const status = await call('GET', '/DeletionQueue/admin/status', undefined, admin);
 assert.equal(value(status, 'StorageAvailable'), true);
-assert.equal(value(status, 'ExecutionAvailable'), false);
+assert.equal(value(status, 'ExecutionAvailable'), true);
 assert.equal(value(status, 'IndependentRollbackProtection'), false);
 assert.equal(value(value(status, 'Policy'), 'AutomaticDeletion'), false);
 const plugins = await call('GET', '/Plugins', undefined, admin);
@@ -46,7 +46,9 @@ assert.ok(pages.some(p => value(p, 'Name') === 'DeletionQueueAdmin'));
 const html = await call('GET', '/web/ConfigurationPage?name=DeletionQueueAdmin', undefined, admin);
 assert.ok(html.includes('Authenticated transition journal'));
 assert.ok(!html.includes('dq-admin'));
-assert.ok((await call('GET', '/DeletionQueue/ui')).includes('Safety preview'));
+for (const removed of ['/DeletionQueue', '/DeletionQueue/ui', '/DeletionQueue/assets/user.js', '/DeletionQueue/assets/theme.js', '/DeletionQueue/assets/native-styles', '/DeletionQueue/assets/queue.css'])
+    await call('GET', removed, undefined, admin, 404);
+assert.ok((await call('GET', '/web/index.html')).includes('dq-web-client'));
 console.log('PASS: native page registration and resources; ordinary shell contains no private state');
 const viewer = await call('POST', '/Users/New', { Name: 'dq-viewer' }, admin);
 const viewerId = value(viewer, 'Id');
@@ -55,6 +57,8 @@ const viewerLogin = await call('POST', '/Users/AuthenticateByName', { Username: 
 const viewerToken = value(viewerLogin, 'AccessToken');
 await call('GET', '/DeletionQueue/proposals', undefined, viewerToken);
 await call('GET', '/DeletionQueue/admin/status', undefined, viewerToken, [401, 403]);
+await call('POST', '/DeletionQueue/admin/proposals/' + randomUUID() + '/approval',
+    { commandId: randomUUID(), revision: 0, snapshot: 'A'.repeat(64), approved: true }, viewerToken, 403);
 await call('GET', '/web/ConfigurationPages', undefined, viewerToken, [401, 403]);
 console.log('PASS: ordinary-user queue access, live elevation on admin evidence and discovery');
 const preferences = await call('GET', '/DeletionQueue/me/preferences', undefined, viewerToken);
@@ -72,11 +76,12 @@ policy[autoProperty] = true;
 await call('PATCH', '/DeletionQueue/admin/policy', { commandId: randomUUID(), revision: value(policy, 'Revision'), policy }, admin, 204);
 const updated = await call('GET', '/DeletionQueue/admin/status', undefined, admin);
 assert.equal(value(value(updated, 'Policy'), 'AutomaticDeletion'), true);
-assert.equal(value(updated, 'ExecutionAvailable'), false);
+assert.equal(value(updated, 'ExecutionAvailable'), true);
+assert.equal(value(value(updated, 'Policy'), 'SeerrManagedDeletionAcknowledged'), false);
 assert.ok(!JSON.stringify(updated).includes(secret));
 await call('POST', '/DeletionQueue/admin/execute', {}, admin, 404);
-console.log('PASS: opt-in cannot bypass absent safety contracts; private credentials never returned');
-for (const path of ['/DeletionQueue/proposals', '/DeletionQueue/me/preferences', '/DeletionQueue/me/notices', '/DeletionQueue/ui'])
+console.log('PASS: older preview opt-in cannot enable real transport without new acknowledgement; private credentials never returned');
+for (const path of ['/DeletionQueue/proposals', '/DeletionQueue/me/preferences', '/DeletionQueue/me/notices'])
     await call('GET', path, undefined, viewerToken);
 const after = await call('GET', '/DeletionQueue/admin/status', undefined, admin);
 const mutations = events => events.filter(e => !['collector', 'jellyfin-activity'].includes(value(e, 'Actor')));

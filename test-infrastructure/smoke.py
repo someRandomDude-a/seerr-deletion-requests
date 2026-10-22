@@ -56,7 +56,7 @@ assert admin, "Missing administrator user session"
 call("GET", "/DeletionQueue/proposals", expected=(401, 403))
 status = call("GET", "/DeletionQueue/admin/status", token=admin)
 assert value(status, "StorageAvailable") is True, status
-assert value(status, "ExecutionAvailable") is False
+assert value(status, "ExecutionAvailable") is True
 assert value(status, "IndependentRollbackProtection") is False
 assert value(value(status, "Policy"), "AutomaticDeletion") is False
 print("PASS: native plugin loads, authenticated store opens, destructive execution defaults off")
@@ -68,8 +68,10 @@ assert "Authenticated transition journal" in html
 assert "Save policy" in html
 assert "dq-admin" not in html
 assert "getUrl('DeletionQueue/" in call("GET", "/web/ConfigurationPage?name=DeletionQueueAdmin.js", token=admin)
-assert "Safety preview" in call("GET", "/DeletionQueue/ui")
-assert "Allow deletion?" in call("GET", "/DeletionQueue/assets/user.js")
+assert "dq-web-client" in call("GET", "/web/index.html")
+for removed in ("/DeletionQueue", "/DeletionQueue/ui", "/DeletionQueue/assets/user.js", "/DeletionQueue/assets/theme.js",
+                "/DeletionQueue/assets/native-styles", "/DeletionQueue/assets/queue.css"):
+    call("GET", removed, token=admin, expected=404)
 print("PASS: native page registration and embedded resources; ordinary shell contains no private state")
 
 viewer = call("POST", "/Users/New", {"Name": "dq-viewer"}, token=admin)
@@ -101,13 +103,14 @@ policy["AutomaticDeletion"] = True
 call("PATCH", "/DeletionQueue/admin/policy", {"commandId": str(uuid.uuid4()), "revision": value(policy, "Revision"), "policy": policy}, admin, expected=204)
 new_status = call("GET", "/DeletionQueue/admin/status", token=admin)
 assert value(value(new_status, "Policy"), "AutomaticDeletion") is True
-assert value(new_status, "ExecutionAvailable") is False
+assert value(new_status, "ExecutionAvailable") is True
+assert value(value(new_status, "Policy"), "SeerrManagedDeletionAcknowledged") is False
 assert secret not in json.dumps(new_status)
 call("POST", "/DeletionQueue/admin/execute", {}, admin, expected=404)
 print("PASS: explicit opt-in does not bypass missing safety contracts; credentials are not returned")
 
 before = value(new_status, "Journal")
-for path in ("/DeletionQueue/proposals", "/DeletionQueue/me/preferences", "/DeletionQueue/me/notices", "/DeletionQueue/ui"):
+for path in ("/DeletionQueue/proposals", "/DeletionQueue/me/preferences", "/DeletionQueue/me/notices"):
     call("GET", path, token=viewer_token)
 after = value(call("GET", "/DeletionQueue/admin/status", token=admin), "Journal")
 assert [e for e in before if value(e, "Actor") not in ("collector", "jellyfin-playback")] == [

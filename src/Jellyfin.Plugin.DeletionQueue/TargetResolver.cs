@@ -26,7 +26,8 @@ public sealed record TargetSelection(Guid? ItemId, int? RequestId, bool Is4K) : 
     }
 }
 
-public sealed class TargetResolver(ILibraryManager library, IUserManager users, QueueRuntime runtime, IServerApplicationHost host)
+public sealed class TargetResolver(ILibraryManager library, IUserManager users, QueueRuntime runtime, IServerApplicationHost host,
+    ISeerrClientFactory seerrClients)
 {
     public string? ActivityKey(Guid itemId) => library.GetItemById(itemId) is { } item ? ActivityKey(item) : null;
     public bool Accessible(Guid userId, Guid itemId)
@@ -58,7 +59,7 @@ public sealed class TargetResolver(ILibraryManager library, IUserManager users, 
         var config = state.Seerr;
         if (string.IsNullOrWhiteSpace(config.BaseUrl) || string.IsNullOrWhiteSpace(config.ApiKey) ||
             string.IsNullOrWhiteSpace(config.JellyfinServerId)) throw new QueueException("SeerrNotConfigured");
-        using var seerr = new SeerrClient(new Uri(config.BaseUrl), config.ApiKey);
+        using var seerr = seerrClients.Create(config);
         var serverSettings = await seerr.JellyfinSettingsAsync(ct);
         if (!string.Equals(config.JellyfinServerId, host.SystemId, StringComparison.OrdinalIgnoreCase) ||
             !string.Equals(Text(serverSettings, "serverId"), host.SystemId, StringComparison.OrdinalIgnoreCase))
@@ -113,33 +114,13 @@ public sealed class TargetResolver(ILibraryManager library, IUserManager users, 
         var key = $"seerr|{activityKey}|{selection.Is4K}";
         var fingerprint = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
             $"{config.BaseUrl}|{key}|{mediaId}|{nativeId:D}|{service.GetInt32()}|{Number(info, externalProperty)}|{config.Revision}")));
-        var own = await OwnsScopeAsync(seerr, info, caller.Id, selection.Is4K, item is Series, ct);
-        // Stock Seerr supplies no conditional, authenticated pinned-file inventory. Never assert otherwise.
+        var own = await SeerrOwnership.OwnsAsync(info, caller.Id, selection.Is4K, item is Series, seerr.UserAsync, ct);
+        // Seerr is explicitly trusted for Arr scope/files; the legacy FilesPinned field remains false and is not a gate.
         var title = item.Name ?? "Media";
         if (title.Length > 512) title = title[..512];
         return new VerifiedTarget(key, activityKey, fingerprint, item.Id, title,
             item is Series ? MediaKind.Series : MediaKind.Movie, mediaId, selection.Is4K, true, own, false, config.Revision,
             $"{(item is Series ? "sonarr" : "radarr")}|{service.GetInt32()}|{Number(info, externalProperty)}");
-    }
-
-    private static async Task<bool> OwnsScopeAsync(SeerrClient seerr, JsonElement info, Guid caller,
-        bool is4k, bool series, CancellationToken ct)
-    {
-        if (!info.TryGetProperty("requests", out var requests) || requests.ValueKind != JsonValueKind.Array) return false;
-        if (requests.GetArrayLength() > 64) throw new QueueException("OwnershipScanIncomplete");
-        foreach (var request in requests.EnumerateArray())
-        {
-            if (Bool(request, "is4k") != is4k || Number(request, "status") is not (2 or 5) ||
-                !request.TryGetProperty("requestedBy", out var owner)) continue;
-            var ownerId = Number(owner, "id");
-            if (ownerId <= 0) continue;
-            var user = await seerr.UserAsync(ownerId, ct);
-            if (!Guid.TryParse(Text(user, "jellyfinUserId"), out var mapped) || mapped != caller) continue;
-            // Seerr's whole-series removal can affect files outside a partial request/Jellyfin inventory.
-            // Until a complete Arr scope contract is supplied, Own requests for series fails closed.
-            if (!series) return true;
-        }
-        return false;
     }
 
     private static int Number(JsonElement item, string key) => item.ValueKind == JsonValueKind.Object && item.TryGetProperty(key, out var value) && value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var n) ? n : 0;

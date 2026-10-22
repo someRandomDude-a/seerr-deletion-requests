@@ -55,7 +55,7 @@ jobs:
         working-directory: test-infrastructure/browser
       - run: npx playwright install --with-deps chromium
         working-directory: test-infrastructure/browser
-      - run: node test-infrastructure/browser/check.mjs
+      - run: node test-infrastructure/browser/integrated-check.mjs
       - run: node test-infrastructure/browser/native-check.mjs
       - run: node test-infrastructure/fault-check.mjs
       - name: Fixture diagnostics

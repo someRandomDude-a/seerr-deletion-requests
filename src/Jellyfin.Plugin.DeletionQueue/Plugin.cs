@@ -3,7 +3,7 @@ using MediaBrowser.Controller;
 using MediaBrowser.Controller.Plugins;
 using MediaBrowser.Model.Plugins;
 using Microsoft.Extensions.DependencyInjection;
-using DeletionQueue.Core;
+using DeletionQueue.Infrastructure;
 using System.Reflection;
 using System.Runtime.InteropServices;
 
@@ -43,7 +43,13 @@ public sealed class ServiceRegistrator : IPluginServiceRegistrator
         services.AddSingleton<QueueRuntime>();
         services.AddSingleton<LiveIdentity>();
         services.AddSingleton<TargetResolver>();
-        services.AddSingleton<NativeWebStyles>();
+        services.AddSingleton<EnhancedConnection>();
+        services.AddSingleton<ISeerrClientFactory, SeerrClientFactory>();
+        services.AddSingleton<ActivityFence>();
+        services.AddSingleton<ActivityInventory>();
+        services.AddTransient<SeerrExecutionGateway>();
+        services.AddSingleton<Microsoft.AspNetCore.Hosting.IStartupFilter, WebInjection>();
         services.AddHostedService<ActivityWorker>();
+        services.AddHostedService<ExecutionWorker>();
     }
 }

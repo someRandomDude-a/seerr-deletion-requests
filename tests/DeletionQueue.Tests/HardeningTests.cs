@@ -25,14 +25,14 @@ public sealed class HardeningTests
         QueueRules.UpdatePreferences(state, user, 0, 48, true);
         QueueRules.Subscription(state, proposal.Id, user, 1, true);
         NoticeRules.Publish(state, proposal); NoticeRules.Publish(state, proposal);
-        var notice = Assert.Single(state.Notices); Assert.Null(notice.ReadAt);
+        var notice = Assert.Single(state.Notices, n => n.UserId == user); Assert.Null(notice.ReadAt);
         var before = JsonSerializer.Serialize(state);
         _ = state.Notices.Where(n => n.UserId == user).ToArray();
         Assert.Equal(before, JsonSerializer.Serialize(state));
         Assert.Throws<QueueException>(() => NoticeRules.MarkRead(state, notice.Id, Guid.NewGuid(), QueueRulesTests.Now));
         Assert.Null(state.Notices[0].ReadAt);
         NoticeRules.MarkRead(state, notice.Id, user, QueueRulesTests.Now);
-        Assert.NotNull(state.Notices[0].ReadAt); Assert.Empty(state.Activity); Assert.Single(proposal.Consents);
+        Assert.NotNull(state.Notices.Single(n => n.Id == notice.Id).ReadAt); Assert.Empty(state.Activity); Assert.Single(proposal.Consents);
     }
 
     [Fact] public void ExistingNoticesRemainUnreadWithoutChangingHistoricalRecords()
@@ -41,12 +41,14 @@ public sealed class HardeningTests
         Assert.NotNull(legacy); Assert.Null(legacy.ReadAt);
     }
 
-    [Fact] public void NoticesRequireBothExplicitOptInAndSubscription()
+    [Fact] public void RelevantNoticesAreAutomaticWithOptOutAndOptionalExtraSubscriptions()
     {
         var s = QueueRulesTests.State(); var p = QueueRulesTests.Propose(s); var user = Guid.NewGuid();
-        NoticeRules.Publish(s, p); Assert.Empty(s.Notices);
-        QueueRules.UpdatePreferences(s, user, 0, 48, true); NoticeRules.Publish(s, p); Assert.Empty(s.Notices);
-        QueueRules.Subscription(s, p.Id, user, 1, true); NoticeRules.Publish(s, p); Assert.Single(s.Notices);
+        NoticeRules.Publish(s, p); Assert.Equal(p.OwnerId, Assert.Single(s.Notices).UserId);
+        QueueRules.UpdatePreferences(s, user, 0, 48, true); NoticeRules.Publish(s, p); Assert.Single(s.Notices);
+        QueueRules.Subscription(s, p.Id, user, 1, true); NoticeRules.Publish(s, p); Assert.Equal(2, s.Notices.Count);
+        QueueRules.UpdatePreferences(s, p.OwnerId, 0, 48, false);
+        s.Notices.Clear(); NoticeRules.Publish(s, p); Assert.Equal(user, Assert.Single(s.Notices).UserId);
     }
 
     [Fact] public void NotificationCapacityCannotBlockOwnerUndoOrChangeConsent()
@@ -93,26 +95,6 @@ public sealed class HardeningTests
             Assert.Equal(bytes, File.ReadAllBytes(database));
         }
         finally { if (Directory.Exists(root)) Directory.Delete(root, recursive: true); }
-    }
-
-    [Fact] public void InstalledLazyStylesAreReadOnlyBoundedAndUseTheSmallestNativeChunks()
-    {
-        var root = Path.Combine(Path.GetTempPath(), "dq-styles-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(root);
-        try
-        {
-            var native = ".emby-select{display:block}.formDialogHeader{display:flex}.countIndicator{position:absolute}.listItemBody{display:block}";
-            File.WriteAllText(Path.Combine(root, "small.abc.css"), native);
-            File.WriteAllText(Path.Combine(root, "large.def.css"), native + new string(' ', 1000));
-            File.WriteAllText(Path.Combine(root, "private.json"), "Not a stylesheet");
-            var before = File.ReadAllBytes(Path.Combine(root, "small.abc.css"));
-            Assert.Equal(["small.abc.css"], InstalledStylesheets.Find(root));
-            Assert.Equal(before, File.ReadAllBytes(Path.Combine(root, "small.abc.css")));
-            File.WriteAllText(Path.Combine(root, "small.abc.css"), ".emby-select{display:block}");
-            File.WriteAllText(Path.Combine(root, "large.def.css"), "No control styles");
-            Assert.Throws<InvalidDataException>(() => InstalledStylesheets.Find(root));
-        }
-        finally { Directory.Delete(root, recursive: true); }
     }
 
     [Fact] public void UnexpectedTriggersCannotRunDuringAuthenticatedWrites()

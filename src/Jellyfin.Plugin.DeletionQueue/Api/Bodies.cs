@@ -32,3 +32,9 @@ public sealed record IntegrationBody(Guid CommandId, [Range(0, long.MaxValue)] l
     [Required, StringLength(2048)] string BaseUrl, [StringLength(512)] string? ApiKey);
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record NoticeReadBody(Guid CommandId);
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record AdministratorApprovalBody(Guid CommandId, [Range(0, long.MaxValue)] long Revision,
+    [Required, RegularExpression("^[A-Fa-f0-9]{64}$")] string Snapshot, bool Approved);
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record UserResetBody(Guid CommandId, [Range(0, long.MaxValue)] long Revision,
+    [Range(0, long.MaxValue)] long PreferencesRevision);

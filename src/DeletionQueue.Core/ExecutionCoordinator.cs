@@ -8,11 +8,11 @@ public interface IExecutionGateway
     Task<ExecutionPreflight> PreflightAsync(Proposal proposal, CancellationToken cancellationToken);
     Task<bool> AnchorClaimAsync(ExecutionClaim claim, CancellationToken cancellationToken);
     Task<bool> RecheckBeforeDispatchAsync(Proposal proposal, CancellationToken cancellationToken);
-    Task DeletePinnedOnceAsync(Proposal proposal, CancellationToken cancellationToken);
-    Task<DeletionProof?> InspectPinnedFilesAsync(Proposal proposal, CancellationToken cancellationToken);
+    Task DeleteOnceAsync(Proposal proposal, CancellationToken cancellationToken);
+    Task<DeletionProof?> InspectOutcomeAsync(Proposal proposal, CancellationToken cancellationToken);
 }
 
-/// <summary>Not registered against stock Seerr: its remote precondition contract is insufficient.</summary>
+/// <summary>One durable claim per destructive attempt; uncertain outcomes are never resent.</summary>
 public sealed class ExecutionCoordinator(IStateStore store, IExecutionGateway gateway, TimeProvider clock)
 {
     public async Task ExecuteAsync(Guid id, CancellationToken cancellationToken)
@@ -29,8 +29,8 @@ public sealed class ExecutionCoordinator(IStateStore store, IExecutionGateway ga
             if (!await gateway.AnchorClaimAsync(claim, cancellationToken) ||
                 !await gateway.RecheckBeforeDispatchAsync(proposal, cancellationToken))
                 throw new QueueException("DispatchVerificationFailed");
-            await gateway.DeletePinnedOnceAsync(proposal, cancellationToken);
-            var proof = await gateway.InspectPinnedFilesAsync(proposal, cancellationToken);
+            await gateway.DeleteOnceAsync(proposal, cancellationToken);
+            var proof = await gateway.InspectOutcomeAsync(proposal, cancellationToken);
             if (proof is null) throw new QueueException("OutcomeUnverified");
             store.Write(Guid.NewGuid(), "executor", "FilesDeleted", state =>
             { QueueRules.FilesDeleted(state, id, proof.Fingerprint, proof.Evidence, clock.GetUtcNow()); return true; });
@@ -59,7 +59,7 @@ public sealed class ExecutionCoordinator(IStateStore store, IExecutionGateway ga
     {
         var p = QueueRules.Find(store.Read(), id);
         if (p.Status != ProposalStatus.Uncertain) throw new QueueException("NotUncertain");
-        var proof = await gateway.InspectPinnedFilesAsync(p, cancellationToken);
+        var proof = await gateway.InspectOutcomeAsync(p, cancellationToken);
         if (proof is null) throw new QueueException("OutcomeUnverified");
         store.Write(Guid.NewGuid(), "reconciliation", "FilesDeleted", state =>
         { QueueRules.FilesDeleted(state, id, proof.Fingerprint, proof.Evidence, clock.GetUtcNow()); return true; });

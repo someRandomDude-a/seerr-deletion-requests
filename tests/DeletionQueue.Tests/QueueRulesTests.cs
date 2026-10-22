@@ -199,10 +199,10 @@ public sealed class QueueRulesTests
         Assert.Equal(ProposalStatus.Blocked, p.Status); Assert.Null(p.EligibleSince);
     }
 
-    [Fact] public void UnpinnedStockSeerrTargetNeverBecomesEligible()
+    [Fact] public void TrustedSeerrDelegationDoesNotRequireAtomicFilePinning()
     {
         var s = State(); var p = Propose(s, Target with { FilesPinned = false }); Evaluate(s, p);
-        Assert.Equal("TargetVerificationRequired", p.Reason); Assert.Null(p.NotBefore);
+        Assert.Equal(ProposalStatus.Waiting, p.Status); Assert.NotNull(p.NotBefore);
     }
 
     [Fact] public void LostCoverageRestartsDelayAndRetainsDeadlineFloor()
@@ -237,6 +237,8 @@ public sealed class QueueRulesTests
         s.LastHeartbeat = due;
         Assert.Throws<QueueException>(() => QueueRules.Claim(s, p.Id, p.Revision, Good, due));
         s.Policy.AutomaticDeletion = true;
+        Assert.Throws<QueueException>(() => QueueRules.Claim(s, p.Id, p.Revision, Good, due));
+        s.Policy.SeerrManagedDeletionAcknowledged = true;
         _ = QueueRules.Claim(s, p.Id, p.Revision, Good, due);
         Assert.Throws<QueueException>(() => QueueRules.Undo(s, p.Id, Owner.Id, p.Revision));
         Assert.Throws<QueueException>(() => QueueRules.Claim(s, p.Id, p.Revision, Good, due));
@@ -244,7 +246,7 @@ public sealed class QueueRulesTests
 
     [Fact] public void CompletionRequiresSeparateFilesDeletedCheckpoint()
     {
-        var s = State(); var p = Propose(s); s.Policy.AutomaticDeletion = true; Evaluate(s, p);
+        var s = State(); var p = Propose(s); s.Policy.AutomaticDeletion = true; s.Policy.SeerrManagedDeletionAcknowledged = true; Evaluate(s, p);
         s.LastHeartbeat = Now.AddHours(48); _ = QueueRules.Claim(s, p.Id, p.Revision, Good, s.LastHeartbeat.Value);
         Assert.Throws<QueueException>(() => QueueRules.Complete(s, p.Id));
         QueueRules.Uncertain(s, p.Id);

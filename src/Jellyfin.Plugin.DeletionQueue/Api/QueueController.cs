@@ -12,20 +12,15 @@ namespace Jellyfin.Plugin.DeletionQueue.Api;
 [TypeFilter(typeof(QueueApiFilter))]
 [RequestSizeLimit(32768)]
 public sealed class QueueController(QueueRuntime runtime, LiveIdentity identity, TargetResolver targets,
-    IUserManager users, IServerApplicationHost host, TimeProvider clock, NativeWebStyles webStyles) : ControllerBase
+    IUserManager users, IServerApplicationHost host, TimeProvider clock,
+    EnhancedConnection enhanced) : ControllerBase
 {
-    [AllowAnonymous, HttpGet("ui")]
-    public IActionResult Ui() => Resource("user.html", "text/html; charset=utf-8");
-
-    [AllowAnonymous, HttpGet("assets/native-styles")]
-    public IActionResult NativeStyles() => Ok(webStyles.Files);
-
     [AllowAnonymous, HttpGet("assets/{name}")]
     public IActionResult Asset(string name) => name switch
     {
-        "user.js" => Resource("user.js", "application/javascript"),
-        "theme.js" => Resource("theme.js", "application/javascript"),
-        "queue.css" => Resource("queue.css", "text/css"),
+        "admin.css" => Resource("admin.css", "text/css"),
+        "integrated.js" => Resource("integrated.js", "application/javascript"),
+        "integrated.css" => Resource("integrated.css", "text/css"),
         _ => NotFound()
     };
 
@@ -57,7 +52,29 @@ public sealed class QueueController(QueueRuntime runtime, LiveIdentity identity,
         var state = runtime.Read();
         QueueRules.RequireProposalAuthority(state, identity.Caller(User), target, targets.Accessible(caller.Id, target.JellyfinItemId));
         return Ok(new { target.Title, target.Fingerprint, Snapshot = QueueRules.Snapshot(state, target, caller.Id),
-            target.Kind, target.Is4K, ExecutionAvailable = false });
+            target.Kind, target.Is4K, ExecutionAvailable = true });
+    }
+
+    [HttpPost("targets/items/{id:guid}/preview")]
+    public async Task<IActionResult> PreviewItem(Guid id, CancellationToken ct)
+    {
+        var caller = identity.Caller(User);
+        var selection = new TargetSelection(id, null, false);
+        VerifiedTarget target;
+        try { target = await targets.ResolveAsync(caller, selection, ct); }
+        catch (QueueException e) when (e.Code is "TargetEditionUnverified" or "SeerrTargetNotManaged")
+        { selection = selection with { Is4K = true }; target = await targets.ResolveAsync(caller, selection, ct); }
+        QueueRules.RequireProposalAuthority(runtime.Read(), identity.Caller(User), target, targets.Accessible(caller.Id, id));
+        var state = runtime.Read();
+        return Ok(new { target.Title, target.Fingerprint, Snapshot = QueueRules.Snapshot(state, target, caller.Id),
+            target.Kind, target.Is4K, Selection = selection, ExecutionAvailable = true });
+    }
+
+    [HttpGet("targets/items/{id:guid}/capabilities")]
+    public IActionResult Capabilities(Guid id)
+    {
+        var caller = identity.Caller(User);
+        return Ok(new { CanPropose = targets.Accessible(caller.Id, id) && QueueRules.Authority(runtime.Read(), caller.Id) != ProposalAuthority.Denied });
     }
 
     [HttpPost("proposals")]
@@ -139,7 +156,7 @@ public sealed class QueueController(QueueRuntime runtime, LiveIdentity identity,
         if (state.NoticeDeliveryIncomplete) Response.Headers["X-DeletionQueue-Notice-Delivery"] = "incomplete";
         var accessible = state.Proposals.Where(p => targets.Accessible(caller.Id, p.Target.JellyfinItemId)).Select(p => p.Id).ToHashSet();
         return Ok(state.Notices.Where(n => n.UserId == caller.Id && accessible.Contains(n.ProposalId))
-            .OrderBy(n => n.ReadAt.HasValue).Take(100).Select(n => new { n.Id, n.ProposalId, n.Text, IsRead = n.ReadAt.HasValue }).ToArray());
+             .OrderBy(n => n.ReadAt.HasValue).ThenByDescending(n => state.Notices.IndexOf(n)).Take(100).Select(n => new { n.Id, n.ProposalId, n.Text, IsRead = n.ReadAt.HasValue }).ToArray());
     }
 
     [HttpPost("me/notices/{id:guid}/read")]
@@ -165,15 +182,18 @@ public sealed class QueueController(QueueRuntime runtime, LiveIdentity identity,
         var state = runtime.Read();
         return Ok(new
         {
-            StorageAvailable = true, ExecutionAvailable = false, Mode = QueueRuntime.ReleaseMode,
+            StorageAvailable = true, ExecutionAvailable = true, Mode = QueueRuntime.ReleaseMode,
             state.Policy, state.CoverageSince, state.LastHeartbeat, state.CoverageHealthy, state.ClockHealthy,
             state.CoverageProblem, CollectorHealthy = runtime.CollectorHealthy, LocalIntegrityVerified = true, IndependentRollbackProtection = false,
             ContinuousWindowCollected = QueueRules.CoverageComplete(state, clock.GetUtcNow()),
-            FullActivityScanVerified = false, PinnedDeletionContractAvailable = false,
+            PerProposalInventoryChecksEnabled = true, SeerrDelegationTrusted = true,
             state.NoticeDeliveryIncomplete,
-            Seerr = new { state.Seerr.BaseUrl, state.Seerr.Revision, KeyConfigured = state.Seerr.ApiKey.Length > 0, JellyfinServerId = host.SystemId },
-            Accounts = users.GetUsers().Take(500).Select(u => new { u.Id, u.Username, EffectiveAuthority = QueueRules.Authority(state, u.Id), Account = identity.Account(u.Id) }).ToArray(),
+             Seerr = new { state.Seerr.BaseUrl, state.Seerr.Revision, KeyConfigured = state.Seerr.ApiKey.Length > 0, JellyfinServerId = host.SystemId },
+             Enhanced = new { ConnectionAvailable = enhanced.Discover() is not null },
+            Accounts = users.GetUsers().OrderBy(u => u.Username, StringComparer.OrdinalIgnoreCase).Take(500).Select(u => new { u.Id, u.Username, EffectiveAuthority = QueueRules.Authority(state, u.Id), Account = identity.Account(u.Id),
+                 PreferencesRevision = state.Preferences.GetValueOrDefault(u.Id)?.Revision ?? 0 }).ToArray(),
             Proposals = state.Proposals.TakeLast(200).ToArray(), ActivityEvidence = state.Activity.TakeLast(500).ToArray(),
+            AdministratorApprovalSnapshots = state.Proposals.TakeLast(200).ToDictionary(p => p.Id, p => QueueRules.AdministratorSnapshot(state, p)),
             MonitoringLimits = new { Accounts = 500, Proposals = 200, Activity = 500 },
             Journal = runtime.History(),
             HistoryAuthentication = "All events since first initialization are authenticated; no imported legacy history."
@@ -206,6 +226,68 @@ public sealed class QueueController(QueueRuntime runtime, LiveIdentity identity,
             state.Seerr.JellyfinServerId = host.SystemId;
             state.Seerr.Revision++;
             QueueRules.BreakCoverage(state, "IntegrationChanged", clock.GetUtcNow());
+            return true;
+        });
+        return NoContent();
+    }
+
+    [HttpPost("admin/seerr/enhanced")]
+    public IActionResult ImportEnhanced(RevisionBody body)
+    {
+        var caller = identity.Caller(User, administrator: true);
+        var connection = enhanced.Discover() ?? throw new QueueException("EnhancedConnectionUnavailable");
+        runtime.Write(body.CommandId, caller.Id.ToString(), "EnhancedSeerrConnectionImported", state =>
+        {
+            _ = identity.Caller(User, administrator: true);
+            if (state.Seerr.Revision != body.Revision) throw new QueueException("RevisionChanged");
+            state.Seerr.BaseUrl = connection.Url;
+            state.Seerr.ApiKey = connection.Key;
+            state.Seerr.JellyfinServerId = host.SystemId;
+            state.Seerr.Revision++;
+            QueueRules.BreakCoverage(state, "IntegrationChanged", clock.GetUtcNow());
+            return true;
+        });
+        return NoContent();
+    }
+
+    [HttpPost("admin/users/{id:guid}/reset")]
+    public IActionResult ResetUser(Guid id, UserResetBody body)
+    {
+        var caller = identity.Caller(User, administrator: true);
+        runtime.Write(body.CommandId, caller.Id.ToString(), "UserPolicyAndPreferencesReset", state =>
+        {
+            _ = identity.Caller(User, administrator: true);
+            if (users.GetUserById(id) is null) throw new QueueException("NotFound");
+            QueueRules.ResetUser(state, id, body.Revision, body.PreferencesRevision);
+            return true;
+        });
+        return NoContent();
+    }
+
+    [HttpPost("admin/proposals/{id:guid}/reconcile")]
+    public async Task<IActionResult> Reconcile(Guid id, RevisionBody body, [FromServices] SeerrExecutionGateway gateway, CancellationToken ct)
+    {
+        var caller = identity.Caller(User, administrator: true);
+        runtime.Write(body.CommandId, caller.Id.ToString(), "ReadOnlyReconciliationRequested", state =>
+        {
+            _ = identity.Caller(User, administrator: true);
+            var p = QueueRules.Find(state, id);
+            if (p.Revision != body.Revision || p.Status != ProposalStatus.Uncertain) throw new QueueException("RevisionChanged");
+            return true;
+        });
+        await new ExecutionCoordinator(runtime, gateway, clock).ReconcileAsync(id, ct);
+        return NoContent();
+    }
+
+    [HttpPost("admin/proposals/{id:guid}/approval")]
+    public IActionResult AdministratorDecision(Guid id, AdministratorApprovalBody body)
+    {
+        var caller = identity.Caller(User, administrator: true);
+        runtime.Write(body.CommandId, caller.Id.ToString(), "AdministratorApprovalChanged", state =>
+        {
+            var p = Visible(state, id, caller.Id);
+            QueueRules.AdministratorDecision(state, id, identity.Caller(User, administrator: true), body.Revision,
+                body.Snapshot, body.Approved, targets.Accessible(caller.Id, p.Target.JellyfinItemId), clock.GetUtcNow());
             return true;
         });
         return NoContent();

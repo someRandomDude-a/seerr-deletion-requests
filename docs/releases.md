@@ -10,7 +10,7 @@ After the first successful tag workflow, add **one** URL under **Dashboard → P
 | Linux ARM64 / standard ARM64 Jellyfin Docker | [stable Linux ARM64](https://raw.githubusercontent.com/someRandomDude-a/seerr-deletion-requests/manifests/stable/manifest-linux-arm64.json) | [preview Linux ARM64](https://raw.githubusercontent.com/someRandomDude-a/seerr-deletion-requests/manifests/preview/manifest-linux-arm64.json) |
 | Windows x64 | [stable Windows x64](https://raw.githubusercontent.com/someRandomDude-a/seerr-deletion-requests/manifests/stable/manifest-win-x64.json) | [preview Windows x64](https://raw.githubusercontent.com/someRandomDude-a/seerr-deletion-requests/manifests/preview/manifest-win-x64.json) |
 
-Copy the raw JSON link, not this documentation page. No repository URL is live until the workflow publishes the `manifests` branch. The current version is **preview**, so stable catalogs intentionally have no current release. Preview catalogs include stable releases as well.
+Copy the raw JSON link, not this documentation page. No repository URL is live until the workflow publishes the `manifests` branch. New integrated releases use the **stable** channel; previous preview entries remain retained in preview catalogs. Preview catalogs include stable releases as well.
 
 Jellyfin 12.2's `VersionInfo` supports neither architecture selection nor prerelease labels. Do not register multiple runtime feeds, both channels, or an invented `platform` field: Jellyfin may otherwise select an incompatible native SQLite library. ZIPs are architecture-specific and contain the appropriate native SQLite binary. Linux musl/Alpine, macOS, 32-bit servers and other runtimes are **not supported** by these catalogs. ARM64 and Windows have native CI coverage; real-server/client certification remains subject to the implementation-status document.
 
@@ -33,7 +33,7 @@ Tags must have the form **`v<major>.<minor>.<build>.<revision>`**, for example `
 
 The catalog retains existing version records, checksums, ABI requirements and immutable download URLs, sorted numerically newest first. The unchanged plugin GUID lets Jellyfin match the higher compatible version to existing **Deletion queue** installations. Discovery/automatic installation follow each server's configured repository/update policy and may require a restart; the workflow does not force updates, alter other plugins, or change Jellyfin settings/state.
 
-Releasing or selecting `stable` does **not** enable automatic deletion or waive safety requirements. This project's present safety-preview limits must remain prominent in release notes until those capabilities actually exist and are verified.
+Releasing or selecting `stable` does **not** itself enable automatic deletion. New explicit real-deletion acknowledgement is required even for installations with an older preview opt-in. Release notes must disclose Seerr-controlled targeting/files, local-only rollback protection and the no-live-media test boundary.
 
 ## Maintainer setup
 

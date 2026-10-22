@@ -70,6 +70,30 @@ public static class QueueRules
         proposal.Revision++;
     }
 
+    public static string AdministratorSnapshot(QueueState state, Proposal proposal)
+    {
+        var activity = string.Join('|', state.Activity.Where(a => a.Key == proposal.Target.ActivityKey)
+            .OrderBy(a => a.UserId).Select(a => $"{a.UserId:D}:{a.Revision}"));
+        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(
+            $"{proposal.Id:D}|{proposal.Target.Fingerprint}|{state.Policy.Revision}|{activity}")));
+    }
+
+    public static bool AdministratorApprovalCurrent(QueueState state, Proposal proposal) =>
+        proposal.AdministratorApproval is { } approval && approval.Snapshot == AdministratorSnapshot(state, proposal);
+
+    public static void AdministratorDecision(QueueState state, Guid id, Account caller, long revision,
+        string snapshot, bool approved, bool accessible, DateTimeOffset now)
+    {
+        if (!caller.Enabled || !caller.Administrator || !accessible) throw new QueueException("AccessDenied");
+        if (!state.Policy.RequireAdministratorApproval) throw new QueueException("AdministratorApprovalNotRequired");
+        var p = Find(state, id);
+        RequireMutable(p, revision);
+        if (snapshot != AdministratorSnapshot(state, p)) throw new QueueException("SnapshotChanged");
+        p.AdministratorApproval = approved ? new(caller.Id, snapshot, now) : null;
+        Block(p, approved ? "VerificationRequired" : "AdministratorApprovalRequired");
+        p.Revision++;
+    }
+
     public static void RecordActivity(QueueState state, Guid user, string key, string? session,
         bool stopped, DateTimeOffset now)
     {
@@ -107,10 +131,10 @@ public static class QueueRules
         var reason = !state.ClockHealthy ? "ClockUnverified"
             : state.Policy.Suspended ? "Suspended"
             : !evidence.OwnerAuthorized ? "OwnerNotAuthorized"
-            : !evidence.TargetVerified || !proposal.Target.FilesPinned ? "TargetVerificationRequired"
+            : !evidence.TargetVerified ? "TargetVerificationRequired"
             : !CoverageComplete(state, now) || !evidence.CompleteActivityScan ? "ActivityCoverageIncomplete"
-            : !evidence.IndependentCheckpointVerified ? "IndependentCheckpointRequired"
-            : !evidence.RemotePreconditionsSupported ? "SeerrPreconditionsRequired" : null;
+            : !evidence.LocalCheckpointVerified ? "LocalCheckpointRequired"
+            : !evidence.SeerrDelegationVerified ? "SeerrDelegationRequired" : null;
         var viewers = state.Activity.Where(a => a.Key == proposal.Target.ActivityKey &&
             (a.At >= now.AddDays(-state.Policy.ActivityDays) || a.Sessions.Count > 0)).ToList();
         foreach (var viewer in viewers) ExtendDelay(state, proposal, viewer.UserId);
@@ -119,7 +143,10 @@ public static class QueueRules
         reason ??= viewers.Any(v => v.Sessions.Count > 0) ? "PlaybackActive" : null;
         reason ??= viewers.Any(v => !proposal.Consents.TryGetValue(v.UserId, out var consent) ||
             consent.Answer != Answer.Yes || consent.Snapshot != Snapshot(state, proposal.Target, v.UserId))
-            ? "ConsentRequired" : null;
+             ? "ConsentRequired" : null;
+        reason ??= state.Policy.RequireAdministratorApproval &&
+            (!AdministratorApprovalCurrent(state, proposal) || !evidence.AdministratorAuthorized)
+            ? "AdministratorApprovalRequired" : null;
         if (reason is not null) { Block(proposal, reason); return; }
         proposal.EligibleSince ??= now;
         var deadline = proposal.EligibleSince.Value.AddHours(proposal.DelayFloorHours);
@@ -133,7 +160,7 @@ public static class QueueRules
         var proposal = Find(state, id);
         RequireMutable(proposal, revision);
         Evaluate(state, proposal, evidence, now);
-        if (!state.Policy.AutomaticDeletion || proposal.Status != ProposalStatus.Ready)
+        if (!state.Policy.AutomaticDeletion || !state.Policy.SeerrManagedDeletionAcknowledged || proposal.Status != ProposalStatus.Ready)
             throw new QueueException("ExecutionBlocked");
         proposal.Claim = new ExecutionClaim(Guid.NewGuid(), now, proposal.Target.Fingerprint, proposal.Revision);
         proposal.Status = ProposalStatus.Claimed;
@@ -189,7 +216,7 @@ public static class QueueRules
         {
             p.DelayFloorHours = Math.Max(p.DelayFloorHours, policy.DelayHours);
             var oldAuthority = oldPolicy.Accounts.GetValueOrDefault(p.OwnerId, oldPolicy.DefaultAuthority);
-            if (windowChanged || policy.Suspended || oldAuthority != Authority(state, p.OwnerId)) Block(p, "PolicyChanged");
+            if (windowChanged || policy.Suspended || policy.RequireAdministratorApproval || oldAuthority != Authority(state, p.OwnerId)) Block(p, "PolicyChanged");
             else ExtendDeadline(p);
             p.Revision++;
         }
@@ -222,6 +249,23 @@ public static class QueueRules
         if (subscribed) pref.Subscriptions.Add(id); else pref.Subscriptions.Remove(id);
         pref.Revision++;
         state.Preferences[user] = pref;
+    }
+
+    public static void ResetUser(QueueState state, Guid user, long policyRevision, long preferencesRevision)
+    {
+        if (user == Guid.Empty) throw new QueueException("NotFound");
+        if ((state.Preferences.GetValueOrDefault(user)?.Revision ?? 0) != preferencesRevision)
+            throw new QueueException("RevisionChanged");
+        var old = state.Policy;
+        var accounts = new Dictionary<Guid, ProposalAuthority>(old.Accounts);
+        accounts.Remove(user);
+        UpdatePolicy(state, new Policy { Accounts = accounts, DefaultAuthority = old.DefaultAuthority,
+            ActivityDays = old.ActivityDays, DelayHours = old.DelayHours,
+             AutomaticDeletion = old.AutomaticDeletion, SeerrManagedDeletionAcknowledged = old.SeerrManagedDeletionAcknowledged,
+            RequireAdministratorApproval = old.RequireAdministratorApproval,
+            Suspended = old.Suspended }, policyRevision);
+        UpdatePreferences(state, user, preferencesRevision, 48, true);
+        state.Preferences[user].Subscriptions.Clear();
     }
 
     public static UserProposal Project(QueueState state, Proposal p, Guid caller, DateTimeOffset now)

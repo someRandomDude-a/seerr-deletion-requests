@@ -23,6 +23,9 @@ public sealed class Policy
     public int ActivityDays { get; set; } = 14;
     public int DelayHours { get; set; } = 48;
     public bool AutomaticDeletion { get; set; }
+    public bool RequireAdministratorApproval { get; set; }
+    // Absent in older previews: an old preview-only opt-in must never silently enable a new destructive transport.
+    public bool SeerrManagedDeletionAcknowledged { get; set; }
     public bool Suspended { get; set; }
 }
 
@@ -30,7 +33,7 @@ public sealed class Preferences
 {
     public long Revision { get; set; }
     public int DelayHours { get; set; } = 48;
-    public bool Notifications { get; set; }
+    public bool Notifications { get; set; } = true;
     public HashSet<Guid> Subscriptions { get; set; } = [];
 }
 
@@ -51,6 +54,7 @@ public sealed class Activity
 }
 
 public sealed record Consent(Answer Answer, string Snapshot, DateTimeOffset At);
+public sealed record AdministratorApproval(Guid UserId, string Snapshot, DateTimeOffset At);
 public sealed record ExecutionClaim(Guid Id, DateTimeOffset At, string TargetFingerprint, long ProposalRevision);
 
 public sealed class Proposal
@@ -66,6 +70,7 @@ public sealed class Proposal
     public DateTimeOffset? NotBefore { get; set; }
     public int DelayFloorHours { get; set; } = 48;
     public Dictionary<Guid, Consent> Consents { get; set; } = [];
+    public AdministratorApproval? AdministratorApproval { get; set; }
     public ExecutionClaim? Claim { get; set; }
     public DateTimeOffset? FilesDeletedAt { get; set; }
     public string? DeletionEvidence { get; set; }
@@ -103,7 +108,7 @@ public sealed record JournalEntry(long Sequence, Guid CommandId, string Actor, s
 
 public sealed record EvaluationEvidence(
     bool OwnerAuthorized, bool TargetVerified, bool CompleteActivityScan,
-    bool IndependentCheckpointVerified, bool RemotePreconditionsSupported);
+    bool LocalCheckpointVerified, bool SeerrDelegationVerified, bool AdministratorAuthorized = false);
 
 // Deliberately does not contain another user's identity, vote, activity, paths or request IDs.
 public sealed record UserProposal(

@@ -8,6 +8,8 @@ Verified against official **Jellyfin Server 12.2 and Jellyfin Web 12.2** source 
 
 **Important distinction:** the stock native configuration-page host is administrator-only. Ordinary-user queue pages need a separately verified entry point/host; the existence of native admin pages is not sufficient proof of that access.
 
+**Integrated Web update (2026-10-22):** ordinary controls now use an original request-time ASP.NET `IStartupFilter` injector, not a configuration page or persistent Web-file rewrite. This is the same server extension point demonstrated by [Enhanced's pinned injection service](https://github.com/n00bcodr/Jellyfin-Enhanced/blob/e46b1129d68bd56505dcbfbb31f5478ffa6ef7c9/Jellyfin.Plugin.JellyfinEnhanced/Services/ScriptInjectionStartupFilter.cs); that source explicitly describes Jellyfin 12's lack of a native Web script-injection hook. Enhanced implementation code was not copied. Our bell is outside its overflow tray; available Requests cards are augmented through native media-ID DOM attributes. Server-side connection import reads only the installed enabled plugin's public configuration. The standalone route/redirect and resources have been removed; private-page verification notes below are historical. See [current status and test boundaries](implementation-status.md).
+
 ## Official source evidence
 
 | Evidence | What it establishes |

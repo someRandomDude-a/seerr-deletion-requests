@@ -13,14 +13,14 @@ Never mount media or production configuration. `compose.yaml` isolates Jellyfin 
    npm ci --ignore-scripts
    node node_modules/playwright/cli.js install chromium
    Pop-Location
-   node test-infrastructure/browser/check.mjs
+    node test-infrastructure/browser/integrated-check.mjs
    node test-infrastructure/browser/native-check.mjs
    node test-infrastructure/fault-check.mjs
    ```
 
    On Linux use `export DQ_BROWSER_SESSION=.test-data/browser-session.json`, run npm/Playwright with `test-infrastructure/browser` as the working directory, and add Playwright's `--with-deps` installation option.
 
-The first browser check mocks notice/read responses to exercise a populated bell without mounting media. It uses the actual plugin page and installed Jellyfin CSS, switches light/dark/custom themes, checks mobile overflow and Escape dismissal, and verifies text-only rendering/logout privacy. Domain tests separately cover persisted notice rules and read ownership. The native check logs in through unmodified Jellyfin Web and exercises the real native administrator page and explicit opt-in/cancel dialog. Its policy changes affect only this disposable fixture, which has no destructive transport.
+The integrated browser check uses real Jellyfin Web login, response injection, header navigation and native admin hosting. It mocks proposal/notice/administrator-approval transport and supplies synthetic media/Enhanced/action-sheet DOM contracts to exercise actions without a media library or Seerr. It checks mobile header visibility/overflow, custom CSS, Escape dismissal, explicit consent/read/Undo, revision-bound admin approval and text-only/session-clearing behavior. This is not a live Enhanced+Seerr+Arr deletion test. The native check exercises the user dropdown/reset, optional per-proposal approval setting and real-deletion opt-in/cancel dialog, then leaves automatic deletion and required admin approval off. Its policy changes affect only this isolated no-media fixture; Seerr's configured port is deliberately unreachable.
 
 **Fault injection intentionally corrupts the fixture's plugin head seal.** The driver verifies the Compose project label, no-network configuration, exact mount destinations and server identity first. It checks host health/user APIs after a worker failure and restart; it must leave the corrupt seal untouched, with the plugin unavailable. It never edits Jellyfin's databases. Do not run this against production or substitute another container.
 

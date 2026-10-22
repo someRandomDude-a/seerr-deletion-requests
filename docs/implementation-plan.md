@@ -1,6 +1,6 @@
 # Jellyfin 12.x deletion queue: implementation plan
 
-Status: a safety-preview implementation now exists; see [implementation status](implementation-status.md). This document remains the target design, not a claim that all release gates have been met. Destructive execution is not connected to stock Seerr.
+Historical design: see [current implementation status](implementation-status.md) for actual behavior. The user subsequently accepted stock Seerr as the authority for Arr targeting/files and accepted local authenticated journal/seals without an external rollback witness. Those decisions supersede the atomic file-pinning and independent-witness gates below. Integrated Web actions/notifications also supersede standalone identifier-entry UI and opt-in-plus-subscription notices. The remaining consent/activity/delay/one-shot requirements still apply. This document is not a claim that every original acceptance gate has been certified.
 
 ## 1. Objective and non-negotiable boundaries
 

@@ -28,10 +28,10 @@ Missing keys or database files in an initialized installation are not a fresh in
 4. Restore only a complete consistent set while stopped. Do not restore an individual key, a single DB file or an older head checkpoint into newer authorization history.
 5. Restart and inspect the elevated integrity/coverage status. A collection gap starts warm-up again; it is never treated as no viewer activity.
 
-**Current limitation:** the local journal/head pair cannot detect a wholesale rollback of a complete consistent backup. Consequently this safety preview has no production destructive transport. A future production release must compare the installation with an independently protected latest checkpoint and reject older authorization/claims before permitting commands. Do not claim the existing local seal provides this protection.
+**Accepted limitation:** the local journal/head pair cannot detect a wholesale rollback of a complete consistent database/key/seal backup. Execution now relies on these local seals without an independent witness. Disable automatic deletion before backup/restore and manually compare against Seerr outcomes. Never use an old backup to retry an attempt; it can replay old authorization/claims. Do not claim the existing local seal prevents whole-installation rollback.
 
 ## Claimed/uncertain outcomes
 
 The tested execution domain consumes a claim before sending a destructive request. A timeout/crash/ambiguous response never releases that claim for another deletion. Recovery may inspect the pinned files only; file absence must be verified and persisted as a separate FilesDeleted checkpoint before monitoring cleanup or completion.
 
-No production execution/reconciliation endpoint is exposed in this preview. Never work around uncertainty by removing a claim, deleting proposal history or submitting another overlapping proposal.
+The admin backlog exposes **Recheck Seerr outcome (never resend deletion)** for uncertain proposals. This explicit authenticated POST reads Seerr status and may record FilesDeleted; it never dispatches deletion. The scheduler separately completes a persisted FilesDeleted checkpoint. Never remove claims/history or create an overlapping proposal to work around uncertainty.

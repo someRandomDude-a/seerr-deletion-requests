@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html><head><title>Deletion queue</title></head><body>
 <div id="deletionQueueAdmin" data-role="page" class="page type-interior pluginConfigurationPage" data-require="emby-input,emby-button,emby-checkbox,emby-select">
-  <link rel="stylesheet" href="../DeletionQueue/assets/queue.css" />
+  <link rel="stylesheet" href="../DeletionQueue/assets/admin.css" />
   <div data-role="content"><div class="content-primary">
     <h1>Deletion queue</h1>
     <p id="dqMode" role="status">Loading safety status…</p>
@@ -13,24 +13,33 @@
       <div class="inputContainer"><label for="dqKey">API key (leave blank to retain)</label><input is="emby-input" id="dqKey" type="password" autocomplete="new-password" /></div>
       <p>Credentials are encrypted in plugin-owned storage and never returned by monitoring reads. Use HTTPS or a trusted private container network.</p>
       <button is="emby-button" type="submit" class="raised button-submit">Save connection</button>
+      <button is="emby-button" type="button" id="dqEnhanced" class="raised">Use Jellyfin-Enhanced connection</button>
+      <p id="dqEnhancedStatus">Checking for an enabled Enhanced plugin with one configured Seerr server…</p>
     </form>
     <h2>Permissions and safety policy</h2>
     <form id="dqPolicy">
       <div class="selectContainer"><label for="dqAuthority">Global proposal authority</label><select is="emby-select" id="dqAuthority"><option value="0">Denied</option><option value="1">Own requests</option><option value="2">Any accessible item</option></select></div>
       <div class="inputContainer"><label for="dqDays">Recent activity window (days)</label><input is="emby-input" id="dqDays" type="number" min="1" max="365" required /></div>
       <div class="inputContainer"><label for="dqHours">Deletion delay (hours, minimum 48)</label><input is="emby-input" id="dqHours" type="number" min="48" max="8760" required /></div>
-      <label class="checkboxContainer"><input is="emby-checkbox" id="dqAuto" type="checkbox" /><span>Opt in to automatic deletion (currently blocked by unavailable safety contracts)</span></label>
+      <label class="checkboxContainer"><input is="emby-checkbox" id="dqAuto" type="checkbox" /><span>Opt in to automatic Seerr-managed deletion</span></label>
+      <label class="checkboxContainer"><input is="emby-checkbox" id="dqRequireAdminApproval" type="checkbox" /><span>Require administrator approval for each proposal (optional)</span></label>
+      <p>Off by default. When enabled, approve proposals in the backlog below. Approval never replaces viewer consent or the removal delay; activity and policy changes invalidate it.</p>
       <label class="checkboxContainer"><input is="emby-checkbox" id="dqSuspend" type="checkbox" /><span>Suspend eligibility</span></label>
-      <p>When supported, deletion removes the movie/whole series and its files from Radarr/Sonarr through Seerr. Seerr requests remain. This preview never sends deletion, even when opted in.</p>
-      <h3>Per-account overrides</h3><div id="dqAccounts"></div>
+      <p>Deletion removes the movie/whole series and its files from Radarr/Sonarr through Seerr. Seerr requests remain. Seerr is trusted to select and remove the correct Arr scope. A full continuous activity window and fresh consent are required. Local authenticated seals do not prevent replay if the database, keys and seals are all restored together.</p>
+      <h3>Per-user settings</h3>
+      <div id="dqAccounts">
+        <div class="selectContainer"><label for="dqUsers">User</label><select is="emby-select" id="dqUsers"></select></div>
+        <div class="selectContainer"><label for="dqUserAuthority">Proposal permission</label><select is="emby-select" id="dqUserAuthority"><option value="">Inherit global</option><option value="0">Denied</option><option value="1">Own requests</option><option value="2">Any accessible item</option></select></div>
+        <button is="emby-button" type="button" id="dqResetUser" class="raised">Reset selected user</button>
+        <p>Reset restores the global permission and default personal preferences (48 hours, relevant notifications enabled). Proposals, approvals, history, credentials, keys and existing deadline floors are retained. Other unsaved edits are not saved by reset.</p>
+      </div>
       <button is="emby-button" type="submit" class="raised button-submit">Save policy</button>
     </form>
     <h2>Coverage and integrity evidence</h2><pre id="dqCoverage" class="dq-evidence"></pre>
     <h2>Backlog and retained history</h2><div id="dqBacklog"></div>
     <h2>Authenticated transition journal</h2><pre id="dqJournal" class="dq-evidence"></pre>
-    <p>Monitoring reads never approve, retry, execute or repair. No reset/force-delete controls are provided.</p>
-    <p><a id="dqUserLink" class="button-link">Open your private queue</a> (same-origin plugin page; no Web files are modified)</p>
-    <dialog id="dqOptInDialog" class="dialog" aria-labelledby="dqOptInTitle"><div class="formDialogHeader"><h2 id="dqOptInTitle" class="formDialogHeaderTitle">Opt in to automatic deletion?</h2></div><div class="formDialogContent dq-dialog-content"><p>This preview cannot execute deletion. A future supported release would remove Arr records and files through Seerr, retaining requests. All consent and safety gates still apply.</p></div><div class="formDialogFooter formDialogFooter-flex"><button is="emby-button" class="raised formDialogFooterItem" type="button" id="dqOptInCancel">Cancel</button><button is="emby-button" class="raised formDialogFooterItem" type="button" id="dqOptInYes">Explicitly opt in</button></div></dialog>
+    <p>Monitoring reads never approve, retry, execute or repair. User preference resets cannot reset storage, consent or deletion safeguards. Use the notification bell in Jellyfin’s top bar for your queue.</p>
+    <dialog id="dqOptInDialog" class="dialog" aria-labelledby="dqOptInTitle"><div class="formDialogHeader"><h2 id="dqOptInTitle" class="formDialogHeaderTitle">Enable real automatic deletion?</h2></div><div class="formDialogContent dq-dialog-content"><p>This enables destructive requests to stock Seerr after current consent, complete activity coverage and the removal delay. Seerr controls Arr targeting and record/file removal; requests are retained. Only local authenticated journal/seals are used, not an independent backup-rollback witness. Older preview-only opt-ins do not enable this transport.</p></div><div class="formDialogFooter formDialogFooter-flex"><button is="emby-button" class="raised formDialogFooterItem" type="button" id="dqOptInCancel">Cancel</button><button is="emby-button" class="raised formDialogFooterItem" type="button" id="dqOptInYes">Explicitly enable deletion</button></div></dialog>
   </div></div>
   <script src="configurationpage?name=DeletionQueueAdmin.js"></script>
 </div>
